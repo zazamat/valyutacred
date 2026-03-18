@@ -3,11 +3,7 @@ export const metadata = {
   description: "Kredit müraciət sistemi",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }) {
   return (
     <html lang="az">
       <body>{children}</body>
