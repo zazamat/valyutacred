@@ -1,30 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import {
-  Calculator,
-  ShieldCheck,
-  Landmark,
-  ArrowRight,
-  CheckCircle2,
-  Users,
-  BadgePercent,
-  Newspaper,
-  ExternalLink,
-  X,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useMemo, useState } from "react";
 
 const BANKS = [
   {
@@ -53,15 +29,7 @@ const BANKS = [
   },
 ];
 
-const HERO_STATS = [
-  { value: "N", label: "kredit məhsulu" },
-  { value: "N", label: "təşkilat" },
-  { value: "N", label: "müraciət" },
-  { value: "24/7", label: "müraciət imkanı" },
-];
-
 const FEATURED_NEWS = {
-  tag: "Günün xəbəri",
   bank: "Unibank",
   title: "Unibank 10% ilə ipoteka krediti təklif edir",
   excerpt:
@@ -70,7 +38,217 @@ const FEATURED_NEWS = {
     "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80",
   sourceUrl: "#",
   content:
-    "Unibank yeni ipoteka təklifi ilə mənzil maliyyələşdirilməsi üzrə daha sərfəli şərtlər təqdim etdiyini açıqlayıb. Kampaniya çərçivəsində müştərilər daha aşağı faiz dərəcəsi, uzunmüddətli ödəmə planı və sürətli ilkin baxılma imkanından yararlana bilərlər. Bu təklif xüsusilə mənzil almağı planlaşdıran və aylıq ödənişini daha optimallaşdırılmış formada qurmaq istəyən istifadəçilər üçün nəzərdə tutulub. Platforma daxilində bu tip xəbərlər həm istifadəçiyə bazardakı təklifləri göstərir, həm də banklar üçün əlavə görünürlük yaradır.",
+    "Unibank yeni ipoteka təklifi ilə mənzil maliyyələşdirilməsi üzrə daha sərfəli şərtlər təqdim etdiyini açıqlayıb. Kampaniya çərçivəsində müştərilər daha aşağı faiz dərəcəsi, uzunmüddətli ödəmə planı və sürətli ilkin baxılma imkanından yararlana bilərlər. Bu təklif xüsusilə mənzil almağı planlaşdıran və aylıq ödənişini daha optimallaşdırılmış formada qurmaq istəyən istifadəçilər üçün nəzərdə tutulub.",
+};
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontFamily: "Arial, sans-serif",
+  },
+  container: {
+    maxWidth: "1200px",
+    margin: "0 auto",
+    padding: "0 20px",
+  },
+  header: {
+    position: "sticky",
+    top: 0,
+    zIndex: 30,
+    background: "rgba(255,255,255,0.95)",
+    backdropFilter: "blur(8px)",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  headerInner: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "20px",
+    padding: "18px 0",
+    flexWrap: "wrap",
+  },
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
+  brandIcon: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "14px",
+    background: "#059669",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 700,
+    fontSize: "22px",
+  },
+  nav: {
+    display: "flex",
+    gap: "24px",
+    fontSize: "15px",
+    color: "#475569",
+    flexWrap: "wrap",
+  },
+  btnPrimary: {
+    background: "#059669",
+    color: "#fff",
+    border: "none",
+    borderRadius: "14px",
+    padding: "12px 22px",
+    cursor: "pointer",
+    fontWeight: 700,
+  },
+  btnSecondary: {
+    background: "#fff",
+    color: "#0f172a",
+    border: "1px solid #cbd5e1",
+    borderRadius: "14px",
+    padding: "12px 22px",
+    cursor: "pointer",
+    fontWeight: 700,
+  },
+  heroWrap: {
+    background: "#fff",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  heroGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1.15fr",
+    gap: "36px",
+    padding: "56px 0",
+  },
+  badge: {
+    display: "inline-block",
+    background: "#ecfdf5",
+    color: "#047857",
+    border: "1px solid #a7f3d0",
+    borderRadius: "999px",
+    padding: "10px 16px",
+    fontSize: "14px",
+    fontWeight: 700,
+    marginBottom: "18px",
+  },
+  h1: {
+    fontSize: "54px",
+    lineHeight: 1.1,
+    margin: "0 0 18px 0",
+  },
+  p: {
+    fontSize: "18px",
+    lineHeight: 1.7,
+    color: "#475569",
+  },
+  checklist: {
+    display: "grid",
+    gap: "12px",
+    marginTop: "28px",
+  },
+  checklistItem: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "16px",
+    padding: "14px 16px",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+  },
+  card: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "24px",
+    boxShadow: "0 8px 24px rgba(15,23,42,0.06)",
+  },
+  cardPad: {
+    padding: "28px",
+  },
+  input: {
+    width: "100%",
+    padding: "14px 16px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "14px",
+    fontSize: "16px",
+    boxSizing: "border-box",
+  },
+  label: {
+    display: "block",
+    fontSize: "14px",
+    fontWeight: 700,
+    marginBottom: "8px",
+  },
+  grid2: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "16px",
+  },
+  grid3: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: "16px",
+  },
+  infoBox: {
+    background: "#f8fafc",
+    borderRadius: "16px",
+    padding: "16px",
+  },
+  statsSection: {
+    background: "#fff",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: "16px",
+    padding: "24px 0",
+  },
+  statCard: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "18px",
+    padding: "18px",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+  },
+  newsSection: {
+    padding: "48px 0",
+  },
+  newsGrid: {
+    display: "grid",
+    gridTemplateColumns: "0.95fr 1.05fr",
+    overflow: "hidden",
+    borderRadius: "24px",
+  },
+  newsImage: {
+    width: "100%",
+    height: "100%",
+    minHeight: "320px",
+    objectFit: "cover",
+    display: "block",
+  },
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15,23,42,0.6)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+    zIndex: 100,
+  },
+  modalBox: {
+    width: "100%",
+    maxWidth: "900px",
+    maxHeight: "90vh",
+    overflow: "auto",
+    background: "#fff",
+    borderRadius: "24px",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+  },
+  footer: {
+    background: "#fff",
+    borderTop: "1px solid #e2e8f0",
+    marginTop: "40px",
+  },
 };
 
 function formatMoney(value) {
@@ -88,7 +266,7 @@ function calculateMonthlyPayment(principal, annualRate, months) {
   return (principal * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months));
 }
 
-export default function ValyutaCredHomepage() {
+export default function Page() {
   const [bankId, setBankId] = useState("kapital-bank");
   const [productId, setProductId] = useState("cash");
   const [amount, setAmount] = useState("12000");
@@ -100,12 +278,12 @@ export default function ValyutaCredHomepage() {
   const [isNewsOpen, setIsNewsOpen] = useState(false);
 
   const selectedBank = useMemo(() => {
-    return BANKS.find((bank) => bank.id === bankId) ?? BANKS[0];
+    return BANKS.find((bank) => bank.id === bankId) || BANKS[0];
   }, [bankId]);
 
   const selectedProduct = useMemo(() => {
     return (
-      selectedBank.products.find((product) => product.id === productId) ??
+      selectedBank.products.find((product) => product.id === productId) ||
       selectedBank.products[0]
     );
   }, [selectedBank, productId]);
@@ -142,530 +320,484 @@ export default function ValyutaCredHomepage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="sticky top-0 z-30 border-b bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-xl font-bold text-white shadow-sm">
-              ₼
-            </div>
+    <div style={styles.page}>
+      <header style={styles.header}>
+        <div style={{ ...styles.container, ...styles.headerInner }}>
+          <div style={styles.brand}>
+            <div style={styles.brandIcon}>₼</div>
             <div>
-              <div className="text-lg font-bold tracking-tight text-emerald-700">
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#047857" }}>
                 ValyutaCred
               </div>
-              <div className="text-xs text-slate-500">
+              <div style={{ fontSize: "13px", color: "#64748b" }}>
                 Kredit müqayisə və müraciət platforması
               </div>
             </div>
           </div>
 
-          <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex">
-            <a href="#calculator" className="transition hover:text-emerald-700">
-              Kalkulyator
-            </a>
-            <a
-              href="#how-it-works"
-              className="transition hover:text-emerald-700"
-            >
-              Necə işləyir
-            </a>
-            <a
-              href="#featured-news"
-              className="transition hover:text-emerald-700"
-            >
-              Günün xəbəri
-            </a>
+          <nav style={styles.nav}>
+            <a href="#calculator">Kalkulyator</a>
+            <a href="#featured-news">Günün xəbəri</a>
+            <a href="#how-it-works">Necə işləyir</a>
           </nav>
 
-          <div className="flex items-center gap-3">
-            <Button variant="outline" className="hidden rounded-xl md:inline-flex">
-              Daxil ol
-            </Button>
-            <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
-              Müraciət et
-            </Button>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button style={styles.btnSecondary}>Daxil ol</button>
+            <button style={styles.btnPrimary}>Müraciət et</button>
           </div>
         </div>
       </header>
 
       <main>
-        <section className="relative overflow-hidden border-b bg-white">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_30%),radial-gradient(circle_at_left,rgba(59,130,246,0.08),transparent_25%)]" />
-          <div className="relative mx-auto grid max-w-7xl items-start gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:px-8 lg:py-24">
-            <div className="flex flex-col justify-center pt-4 lg:pt-8">
-              <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
-                <ShieldCheck className="h-4 w-4" />
+        <section style={styles.heroWrap}>
+          <div style={{ ...styles.container, ...styles.heroGrid }}>
+            <div>
+              <div style={styles.badge}>
                 Kredit axtarışı və müraciət üçün vahid platforma
               </div>
 
-              <h1 className="max-w-xl text-4xl font-extrabold leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
+              <h1 style={styles.h1}>
                 Krediti seç, hesabla və müraciəti dərhal göndər
               </h1>
 
-              <p className="mt-5 max-w-xl text-lg leading-8 text-slate-600">
+              <p style={styles.p}>
                 Əsas məhsulumuz sadədir: uyğun bank və kredit növünü seçirsiniz,
                 aylıq ödənişi görürsünüz və müraciətinizi bir axında tamamlayırsınız.
               </p>
 
-              <div className="mt-8 grid max-w-xl gap-3">
+              <div style={styles.checklist}>
                 {[
                   "Bank və kredit məhsulunu seç",
                   "Aylıq ödənişi dərhal gör",
                   "Yalnız seçdiyin banka və ya digər banklara müraciət et",
                 ].map((item) => (
-                  <div
-                    key={item}
-                    className="flex items-center gap-3 rounded-2xl bg-white/85 px-4 py-3 shadow-sm ring-1 ring-slate-200"
-                  >
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                    <span className="text-sm font-medium text-slate-700">
-                      {item}
-                    </span>
+                  <div key={item} style={styles.checklistItem}>
+                    ✓ {item}
                   </div>
                 ))}
               </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Button
-                  size="lg"
-                  className="rounded-2xl bg-emerald-600 px-6 hover:bg-emerald-700"
-                >
-                  Kalkulyatora başla <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-                <Button size="lg" variant="outline" className="rounded-2xl px-6">
-                  Necə işləyir
-                </Button>
+              <div style={{ display: "flex", gap: "12px", marginTop: "28px", flexWrap: "wrap" }}>
+                <button style={styles.btnPrimary}>Kalkulyatora başla</button>
+                <button style={styles.btnSecondary}>Necə işləyir</button>
               </div>
             </div>
 
-            <Card
-              id="calculator"
-              className="rounded-3xl border-slate-200 bg-white shadow-xl shadow-slate-200/60"
-            >
-              <CardContent className="p-6 sm:p-8">
-                <div className="mb-6 flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                    <Calculator className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold tracking-tight">
-                      Kredit kalkulyatoru
-                    </h2>
-                    <p className="text-sm text-slate-500">
-                      Şərtləri seçin, nəticəni dərhal görün
-                    </p>
-                  </div>
-                </div>
+            <div style={{ ...styles.card, ...styles.cardPad }} id="calculator">
+              <h2 style={{ marginTop: 0, marginBottom: "8px", fontSize: "32px" }}>
+                Kredit kalkulyatoru
+              </h2>
+              <p style={{ ...styles.p, fontSize: "15px", marginTop: 0 }}>
+                Şərtləri seçin, nəticəni dərhal görün
+              </p>
 
-                <div className="grid gap-5">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Bank</Label>
-                      <Select value={bankId} onValueChange={handleBankChange}>
-                        <SelectTrigger className="h-12 rounded-xl">
-                          <SelectValue placeholder="Bank seçin" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {BANKS.map((bank) => (
-                            <SelectItem key={bank.id} value={bank.id}>
-                              {bank.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Kredit növü</Label>
-                      <Select value={productId} onValueChange={handleProductChange}>
-                        <SelectTrigger className="h-12 rounded-xl">
-                          <SelectValue placeholder="Kredit növü seçin" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {selectedBank.products.map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              {product.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Məbləğ (AZN)</Label>
-                      <Input
-                        className="h-12 rounded-xl"
-                        type="number"
-                        value={amount}
-                        min={selectedProduct.min}
-                        max={selectedProduct.max}
-                        onChange={(e) => setAmount(e.target.value)}
-                      />
-                      <div className="text-xs text-slate-500">
-                        Aralıq: {formatMoney(selectedProduct.min)} –{" "}
-                        {formatMoney(selectedProduct.max)}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Müddət (ay)</Label>
-                      <Input
-                        className="h-12 rounded-xl"
-                        type="number"
-                        value={months}
-                        min={1}
-                        max={selectedProduct.months}
-                        onChange={(e) => setMonths(e.target.value)}
-                      />
-                      <div className="text-xs text-slate-500">
-                        Maksimum müddət: {selectedProduct.months} ay
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 rounded-2xl bg-slate-50 p-4 sm:grid-cols-3">
-                    <div>
-                      <div className="text-sm text-slate-500">İllik faiz</div>
-                      <div className="mt-1 text-xl font-bold text-slate-900">
-                        {selectedProduct.rate}%
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-slate-500">Aylıq ödəniş</div>
-                      <div className="mt-1 text-xl font-bold text-emerald-700">
-                        {formatMoney(payment)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-slate-500">Cəmi ödəniş</div>
-                      <div className="mt-1 text-xl font-bold text-slate-900">
-                        {formatMoney(totalPayment)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
-                    <div className="text-sm font-semibold text-slate-900">
-                      Kimdən təklif almaq istəyirsiniz?
-                    </div>
-                    <RadioGroup
-                      value={leadType}
-                      onValueChange={setLeadType}
-                      className="grid gap-3"
-                    >
-                      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition hover:border-emerald-300 hover:bg-emerald-50/50">
-                        <RadioGroupItem
-                          value="exclusive"
-                          id="exclusive"
-                          className="mt-1"
-                        />
-                        <div>
-                          <div className="font-semibold text-slate-900">
-                            Yalnız seçdiyim bankdan
-                          </div>
-                          <div className="text-sm text-slate-500">
-                            Müraciət yalnız seçdiyiniz bank üçün nəzərdə tutulur.
-                          </div>
-                        </div>
-                      </label>
-
-                      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition hover:border-emerald-300 hover:bg-emerald-50/50">
-                        <RadioGroupItem value="shared" id="shared" className="mt-1" />
-                        <div>
-                          <div className="font-semibold text-slate-900">
-                            Digər banklardan da təklif almaq istəyirəm
-                          </div>
-                          <div className="text-sm text-slate-500">
-                            Məlumatlarınız seçiminizə uyğun olaraq banklara təqdim
-                            oluna bilər.
-                          </div>
-                        </div>
-                      </label>
-                    </RadioGroup>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Ad və soyad</Label>
-                      <Input
-                        className="h-12 rounded-xl"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        placeholder="Məs: Əhməd Əhmədov"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Telefon</Label>
-                      <Input
-                        className="h-12 rounded-xl"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+994 50 000 00 00"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      className="h-12 rounded-xl"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="mail@example.com"
-                    />
-                  </div>
-
-                  <div className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                    Göstərilən nəticə təxmini hesablamadır. Yekun kredit şərtləri
-                    bankın daxili qiymətləndirməsinə əsasən dəyişə bilər.
-                  </div>
-
-                  <Button
-                    size="lg"
-                    className="h-12 rounded-2xl bg-emerald-600 text-base hover:bg-emerald-700"
+              <div style={{ ...styles.grid2, marginTop: "20px" }}>
+                <div>
+                  <label style={styles.label}>Bank</label>
+                  <select
+                    style={styles.input}
+                    value={bankId}
+                    onChange={(e) => handleBankChange(e.target.value)}
                   >
-                    Müraciəti göndər
-                  </Button>
+                    {BANKS.map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {bank.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </CardContent>
-            </Card>
+
+                <div>
+                  <label style={styles.label}>Kredit növü</label>
+                  <select
+                    style={styles.input}
+                    value={productId}
+                    onChange={(e) => handleProductChange(e.target.value)}
+                  >
+                    {selectedBank.products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ ...styles.grid2, marginTop: "16px" }}>
+                <div>
+                  <label style={styles.label}>Məbləğ (AZN)</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    value={amount}
+                    min={selectedProduct.min}
+                    max={selectedProduct.max}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                  <div style={{ marginTop: "8px", fontSize: "12px", color: "#64748b" }}>
+                    Aralıq: {formatMoney(selectedProduct.min)} – {formatMoney(selectedProduct.max)}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={styles.label}>Müddət (ay)</label>
+                  <input
+                    style={styles.input}
+                    type="number"
+                    value={months}
+                    min={1}
+                    max={selectedProduct.months}
+                    onChange={(e) => setMonths(e.target.value)}
+                  />
+                  <div style={{ marginTop: "8px", fontSize: "12px", color: "#64748b" }}>
+                    Maksimum müddət: {selectedProduct.months} ay
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ ...styles.grid3, ...styles.infoBox, marginTop: "18px" }}>
+                <div>
+                  <div style={{ fontSize: "14px", color: "#64748b" }}>İllik faiz</div>
+                  <div style={{ fontSize: "28px", fontWeight: 800 }}>{selectedProduct.rate}%</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "14px", color: "#64748b" }}>Aylıq ödəniş</div>
+                  <div style={{ fontSize: "28px", fontWeight: 800, color: "#059669" }}>
+                    {formatMoney(payment)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "14px", color: "#64748b" }}>Cəmi ödəniş</div>
+                  <div style={{ fontSize: "28px", fontWeight: 800 }}>
+                    {formatMoney(totalPayment)}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #e2e8f0", borderRadius: "16px", padding: "16px", marginTop: "18px" }}>
+                <div style={{ fontWeight: 700, marginBottom: "12px" }}>
+                  Kimdən təklif almaq istəyirsiniz?
+                </div>
+
+                <label style={{ display: "block", marginBottom: "10px" }}>
+                  <input
+                    type="radio"
+                    name="leadType"
+                    value="exclusive"
+                    checked={leadType === "exclusive"}
+                    onChange={(e) => setLeadType(e.target.value)}
+                  />{" "}
+                  Yalnız seçdiyim bankdan
+                </label>
+
+                <label style={{ display: "block" }}>
+                  <input
+                    type="radio"
+                    name="leadType"
+                    value="shared"
+                    checked={leadType === "shared"}
+                    onChange={(e) => setLeadType(e.target.value)}
+                  />{" "}
+                  Digər banklardan da təklif almaq istəyirəm
+                </label>
+
+                <div style={{ marginTop: "10px", fontSize: "13px", color: "#64748b" }}>
+                  Məlumatlarınız seçiminizə uyğun olaraq banklara təqdim oluna bilər.
+                </div>
+              </div>
+
+              <div style={{ ...styles.grid2, marginTop: "16px" }}>
+                <div>
+                  <label style={styles.label}>Ad və soyad</label>
+                  <input
+                    style={styles.input}
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Məs: Əhməd Əhmədov"
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.label}>Telefon</label>
+                  <input
+                    style={styles.input}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+994 50 000 00 00"
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginTop: "16px" }}>
+                <label style={styles.label}>Email</label>
+                <input
+                  style={styles.input}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="mail@example.com"
+                />
+              </div>
+
+              <div
+                style={{
+                  marginTop: "16px",
+                  background: "#fffbeb",
+                  color: "#92400e",
+                  borderRadius: "16px",
+                  padding: "16px",
+                  lineHeight: 1.7,
+                }}
+              >
+                Göstərilən nəticə təxmini hesablamadır. Yekun kredit şərtləri bankın
+                daxili qiymətləndirməsinə əsasən dəyişə bilər.
+              </div>
+
+              <button style={{ ...styles.btnPrimary, width: "100%", marginTop: "16px" }}>
+                Müraciəti göndər
+              </button>
+            </div>
           </div>
         </section>
 
-        <section className="border-b bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <section style={styles.statsSection}>
+          <div style={styles.container}>
+            <div style={styles.statsGrid}>
               {HERO_STATS.map((item) => (
-                <Card key={item.label} className="rounded-2xl border-slate-200 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="text-2xl font-extrabold text-emerald-700">
-                      {item.value}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">{item.label}</div>
-                  </CardContent>
-                </Card>
+                <div key={item.label} style={styles.statCard}>
+                  <div style={{ fontSize: "34px", fontWeight: 800, color: "#059669" }}>
+                    {item.value}
+                  </div>
+                  <div style={{ marginTop: "6px", color: "#64748b" }}>{item.label}</div>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section id="featured-news" className="border-b bg-slate-50/70">
-          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-            <div className="mb-6 flex items-end justify-between gap-4">
-              <div>
-                <div className="mb-2 inline-flex rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
-                  Günün xəbəri
-                </div>
-                <h2 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">
-                  Bank məhsulu üzrə seçilmiş sponsorlu xəbər
-                </h2>
-              </div>
+        <section id="featured-news" style={{ ...styles.newsSection, background: "#f8fafc" }}>
+          <div style={styles.container}>
+            <div style={{ marginBottom: "20px" }}>
+              <div style={styles.badge}>Günün xəbəri</div>
+              <h2 style={{ fontSize: "38px", margin: 0 }}>
+                Bank məhsulu üzrə seçilmiş sponsorlu xəbər
+              </h2>
             </div>
 
-            <Card className="overflow-hidden rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/60">
-              <CardContent className="p-0">
-                <div className="grid gap-0 md:grid-cols-[0.95fr_1.05fr]">
-                  <div className="p-6 sm:p-8">
-                    <div className="mb-3 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                      {FEATURED_NEWS.bank}
-                    </div>
-
-                    <h3 className="line-clamp-2 text-2xl font-extrabold leading-tight text-slate-950">
-                      {FEATURED_NEWS.title}
-                    </h3>
-
-                    <p className="mt-4 line-clamp-3 text-sm leading-7 text-slate-600">
-                      {FEATURED_NEWS.excerpt}
-                    </p>
-
-                    <div className="mt-6 flex flex-wrap gap-3">
-                      <Button
-                        className="rounded-2xl bg-slate-900 hover:bg-slate-800"
-                        onClick={() => setIsNewsOpen(true)}
-                      >
-                        Davamını oxu
-                      </Button>
-                    </div>
+            <div style={{ ...styles.card, overflow: "hidden" }}>
+              <div style={styles.newsGrid}>
+                <div style={{ padding: "32px" }}>
+                  <div
+                    style={{
+                      display: "inline-block",
+                      background: "#ecfdf5",
+                      color: "#047857",
+                      borderRadius: "999px",
+                      padding: "8px 12px",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      marginBottom: "16px",
+                    }}
+                  >
+                    {FEATURED_NEWS.bank}
                   </div>
 
-                  <div className="relative min-h-[320px] bg-slate-100 md:min-h-full">
-                    <img
-                      src={FEATURED_NEWS.image}
-                      alt={FEATURED_NEWS.title}
-                      className="h-full w-full object-cover object-center"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-transparent" />
-                  </div>
+                  <h3 style={{ fontSize: "28px", lineHeight: 1.2, marginTop: 0 }}>
+                    {FEATURED_NEWS.title}
+                  </h3>
+
+                  <p style={{ ...styles.p, fontSize: "16px" }}>{FEATURED_NEWS.excerpt}</p>
+
+                  <button
+                    style={{ ...styles.btnSecondary, marginTop: "10px", background: "#0f172a", color: "#fff" }}
+                    onClick={() => setIsNewsOpen(true)}
+                  >
+                    Davamını oxu
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+
+                <div>
+                  <img
+                    src={FEATURED_NEWS.image}
+                    alt={FEATURED_NEWS.title}
+                    style={styles.newsImage}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section
-          id="how-it-works"
-          className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8"
-        >
-          <div className="mb-10 max-w-2xl">
-            <div className="mb-3 inline-flex rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
-              Necə işləyir
+        <section id="how-it-works" style={{ padding: "56px 0" }}>
+          <div style={styles.container}>
+            <div style={{ maxWidth: "700px", marginBottom: "28px" }}>
+              <div style={{ ...styles.badge, marginBottom: "12px" }}>Necə işləyir</div>
+              <h2 style={{ fontSize: "44px", margin: 0 }}>3 addımda müraciət prosesi</h2>
+              <p style={{ ...styles.p, marginTop: "12px" }}>
+                İstifadəçidən banka qədər bütün axın sadə, aydın və idarə olunan şəkildə qurulur.
+              </p>
             </div>
-            <h2 className="text-3xl font-extrabold tracking-tight">
-              3 addımda müraciət prosesi
-            </h2>
-            <p className="mt-3 text-slate-600">
-              İstifadəçidən banka qədər bütün axın sadə, aydın və idarə olunan
-              şəkildə qurulur.
-            </p>
-          </div>
 
-          <div className="grid gap-6 md:grid-cols-3">
-            {[
-              {
-                icon: Landmark,
-                title: "Bank və məhsul seçin",
-                text: "Uyğun bankı və kredit növünü seçin, məbləği və müddəti təyin edin.",
-              },
-              {
-                icon: BadgePercent,
-                title: "Aylıq ödənişi görün",
-                text: "Faiz dərəcəsinə əsasən aylıq və ümumi ödəniş məbləği dərhal hesablanır.",
-              },
-              {
-                icon: Users,
-                title: "Müraciəti tamamlayın",
-                text: "Formanı doldurun və yalnız seçdiyiniz banka və ya digər banklara açıq müraciət edin.",
-              },
-            ].map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <Card key={item.title} className="rounded-3xl border-slate-200 shadow-sm">
-                  <CardContent className="p-8">
-                    <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                      <Icon className="h-7 w-7" />
-                    </div>
-                    <div className="mb-2 text-sm font-bold text-emerald-700">
-                      Addım {index + 1}
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-950">
-                      {item.title}
-                    </h3>
-                    <p className="mt-3 leading-7 text-slate-600">{item.text}</p>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
+              {[
+                {
+                  title: "Bank və məhsul seçin",
+                  text: "Uyğun bankı və kredit növünü seçin, məbləği və müddəti təyin edin.",
+                },
+                {
+                  title: "Aylıq ödənişi görün",
+                  text: "Faiz dərəcəsinə əsasən aylıq və ümumi ödəniş məbləği dərhal hesablanır.",
+                },
+                {
+                  title: "Müraciəti tamamlayın",
+                  text: "Formanı doldurun və yalnız seçdiyiniz banka və ya digər banklara açıq müraciət edin.",
+                },
+              ].map((item, index) => (
+                <div key={item.title} style={{ ...styles.card, padding: "28px" }}>
+                  <div style={{ color: "#059669", fontWeight: 800, marginBottom: "10px" }}>
+                    Addım {index + 1}
+                  </div>
+                  <h3 style={{ marginTop: 0, fontSize: "24px" }}>{item.title}</h3>
+                  <p style={{ ...styles.p, fontSize: "16px" }}>{item.text}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t bg-white">
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-2 lg:grid-cols-4 lg:px-8">
+      <footer style={styles.footer}>
+        <div
+          style={{
+            ...styles.container,
+            display: "grid",
+            gridTemplateColumns: "1.2fr 1fr 1fr 1fr",
+            gap: "30px",
+            padding: "42px 20px",
+          }}
+        >
           <div>
-            <div className="text-lg font-bold text-emerald-700">ValyutaCred</div>
-            <p className="mt-3 max-w-xs text-sm leading-7 text-slate-600">
+            <div style={{ fontSize: "20px", fontWeight: 800, color: "#047857" }}>
+              ValyutaCred
+            </div>
+            <p style={{ ...styles.p, fontSize: "15px", maxWidth: "280px" }}>
               Kredit müraciətlərini sadələşdirən və banklarla istifadəçi arasında
               strukturlaşdırılmış axın yaradan platforma.
             </p>
           </div>
 
           <div>
-            <div className="text-sm font-bold uppercase tracking-wide text-slate-900">
-              Platforma
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <a href="#calculator" className="block hover:text-emerald-700">
-                Kalkulyator
-              </a>
-              <a href="#how-it-works" className="block hover:text-emerald-700">
-                Necə işləyir
-              </a>
-              <a href="#featured-news" className="block hover:text-emerald-700">
-                Günün xəbəri
-              </a>
-              <a href="#" className="block hover:text-emerald-700">
-                Əlaqə
-              </a>
-            </div>
+            <div style={{ fontWeight: 800, marginBottom: "12px" }}>Platforma</div>
+            <div><a href="#calculator">Kalkulyator</a></div>
+            <div><a href="#featured-news">Günün xəbəri</a></div>
+            <div><a href="#how-it-works">Necə işləyir</a></div>
           </div>
 
           <div>
-            <div className="text-sm font-bold uppercase tracking-wide text-slate-900">
-              Hüquqi
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <a href="#" className="block hover:text-emerald-700">
-                Məxfilik siyasəti
-              </a>
-              <a href="#" className="block hover:text-emerald-700">
-                İstifadəçi razılaşması
-              </a>
-              <a href="#" className="block hover:text-emerald-700">
-                Cookie siyasəti
-              </a>
-              <a href="#" className="block hover:text-emerald-700">
-                FAQ
-              </a>
-            </div>
+            <div style={{ fontWeight: 800, marginBottom: "12px" }}>Hüquqi</div>
+            <div><a href="#">Məxfilik siyasəti</a></div>
+            <div><a href="#">İstifadəçi razılaşması</a></div>
+            <div><a href="#">Cookie siyasəti</a></div>
+            <div><a href="#">FAQ</a></div>
           </div>
 
           <div>
-            <div className="text-sm font-bold uppercase tracking-wide text-slate-900">
-              Əlaqə
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <div>Bakı, Azərbaycan</div>
-              <div>info@valyutacred.az</div>
-              <div>+994 12 000 00 00</div>
-            </div>
+            <div style={{ fontWeight: 800, marginBottom: "12px" }}>Əlaqə</div>
+            <div>Bakı, Azərbaycan</div>
+            <div>info@valyutacred.az</div>
+            <div>+994 12 000 00 00</div>
           </div>
         </div>
 
-        <div className="border-t border-slate-200 px-4 py-5 text-center text-sm text-slate-500 sm:px-6 lg:px-8">
+        <div
+          style={{
+            borderTop: "1px solid #e2e8f0",
+            textAlign: "center",
+            padding: "18px",
+            color: "#64748b",
+            fontSize: "14px",
+          }}
+        >
           © 2026 ValyutaCred. Bütün hüquqlar qorunur.
         </div>
       </footer>
 
       {isNewsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 sm:px-8">
+        <div style={styles.modalBackdrop} onClick={() => setIsNewsOpen(false)}>
+          <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "20px 24px",
+                borderBottom: "1px solid #e2e8f0",
+              }}
+            >
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                <div style={{ fontSize: "12px", color: "#047857", fontWeight: 800 }}>
                   {FEATURED_NEWS.bank}
                 </div>
-                <h3 className="mt-1 text-xl font-extrabold text-slate-950 sm:text-2xl">
+                <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "6px" }}>
                   {FEATURED_NEWS.title}
-                </h3>
+                </div>
               </div>
 
               <button
-                type="button"
                 onClick={() => setIsNewsOpen(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: "999px",
+                  width: "40px",
+                  height: "40px",
+                  cursor: "pointer",
+                  fontSize: "20px",
+                }}
               >
-                <X className="h-5 w-5" />
+                ×
               </button>
             </div>
 
-            <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-6 py-6 sm:px-8">
-              <div className="rounded-3xl bg-gradient-to-r from-emerald-50 to-sky-50 p-6">
-                <div className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm">
+            <div style={{ padding: "24px" }}>
+              <div
+                style={{
+                  padding: "24px",
+                  borderRadius: "20px",
+                  background: "linear-gradient(to right, #ecfdf5, #f0f9ff)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-block",
+                    background: "#fff",
+                    color: "#047857",
+                    borderRadius: "999px",
+                    padding: "8px 12px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    marginBottom: "14px",
+                  }}
+                >
                   Sponsorlu kontent
                 </div>
-                <p className="mt-4 text-base leading-8 text-slate-700">
+                <p style={{ ...styles.p, fontSize: "17px", margin: 0 }}>
                   {FEATURED_NEWS.content}
                 </p>
               </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Button asChild variant="outline" className="rounded-2xl">
-                  <a href={FEATURED_NEWS.sourceUrl} target="_blank" rel="noreferrer">
-                    Orijinal xəbəri oxu <ExternalLink className="ml-2 h-4 w-4" />
-                  </a>
-                </Button>
+              <div style={{ marginTop: "20px" }}>
+                <a
+                  href={FEATURED_NEWS.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "inline-block",
+                    ...styles.btnSecondary,
+                    textDecoration: "none",
+                  }}
+                >
+                  Orijinal xəbəri oxu →
+                </a>
               </div>
             </div>
           </div>
