@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 const BANKS = [
   {
@@ -217,20 +218,25 @@ export default function Page() {
               flexWrap: "wrap",
             }}
           >
-            <button
-              style={{
-                background: "#fff",
-                color: "#0f172a",
-                border: "1px solid #cbd5e1",
-                borderRadius: "14px",
-                padding: "12px 20px",
-                fontWeight: 700,
-                cursor: "pointer",
-                width: isMobile ? "calc(50% - 6px)" : "auto",
-              }}
-            >
-              Daxil ol
-            </button>
+            <Link
+  href="/admin"
+  style={{
+    background: "#fff",
+    color: "#0f172a",
+    border: "1px solid #cbd5e1",
+    borderRadius: "14px",
+    padding: "12px 20px",
+    fontWeight: 700,
+    textDecoration: "none",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: isMobile ? "calc(50% - 6px)" : "auto",
+    boxSizing: "border-box",
+  }}
+>
+  Daxil ol
+</Link>
             <button
               onClick={() => scrollToId("application-form")}
               style={{
