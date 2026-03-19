@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -56,22 +56,36 @@ const leads = [
 
 export default function AdminPage() {
   const router = useRouter();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-useEffect(() => {
-  const auth = localStorage.getItem("valyutacred_auth");
+  useEffect(() => {
+    try {
+      const auth = localStorage.getItem("valyutacred_auth");
 
-  if (!auth) {
-    router.push("/login");
-    return;
+      if (!auth) {
+        router.push("/login");
+        return;
+      }
+
+      const parsed = JSON.parse(auth);
+
+      if (parsed.role !== "super_admin" && parsed.role !== "admin") {
+        router.push("/login");
+        return;
+      }
+
+      setIsCheckingAuth(false);
+    } catch (error) {
+      localStorage.removeItem("valyutacred_auth");
+      router.push("/login");
+    }
+  }, [router]);
+
+  if (isCheckingAuth) {
+    return null;
   }
 
-  const parsed = JSON.parse(auth);
-
-  if (parsed.role !== "super_admin" && parsed.role !== "admin") {
-    router.push("/login");
-  }
-}, []);
-return (
+  return (
     <div
       style={{
         minHeight: "100vh",
