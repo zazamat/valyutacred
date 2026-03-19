@@ -544,29 +544,77 @@ export default function Page() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr",
-                  gap: "16px",
+                  gridTemplateColumns: screenWidth < 900 ? "1fr" : "1fr 1fr 1fr",
+                  gap: "12px",
                   background: "#f8fafc",
                   borderRadius: "18px",
-                  padding: "18px",
+                  padding: isMobile ? "14px" : "18px",
                   marginTop: "18px",
                 }}
               >
-                <div>
-                  <div style={{ fontSize: "14px", color: "#64748b" }}>İllik faiz</div>
-                  <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "6px" }}>
+                <div
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "16px",
+                    padding: isMobile ? "12px" : "14px",
+                  }}
+                >
+                  <div style={{ fontSize: "13px", color: "#64748b" }}>İllik faiz</div>
+                  <div
+                    style={{
+                      fontSize: isMobile ? "22px" : "28px",
+                      fontWeight: 800,
+                      marginTop: "6px",
+                      lineHeight: 1.2,
+                      wordBreak: "break-word",
+                    }}
+                  >
                     {selectedProduct.rate}%
                   </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: "14px", color: "#64748b" }}>Aylıq ödəniş</div>
-                  <div style={{ fontSize: "28px", fontWeight: 800, color: "#059669", marginTop: "6px" }}>
+
+                <div
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "16px",
+                    padding: isMobile ? "12px" : "14px",
+                  }}
+                >
+                  <div style={{ fontSize: "13px", color: "#64748b" }}>Aylıq ödəniş</div>
+                  <div
+                    style={{
+                      fontSize: isMobile ? "22px" : "28px",
+                      fontWeight: 800,
+                      color: "#059669",
+                      marginTop: "6px",
+                      lineHeight: 1.2,
+                      wordBreak: "break-word",
+                    }}
+                  >
                     {formatMoney(payment)}
                   </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: "14px", color: "#64748b" }}>Cəmi ödəniş</div>
-                  <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "6px" }}>
+
+                <div
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "16px",
+                    padding: isMobile ? "12px" : "14px",
+                  }}
+                >
+                  <div style={{ fontSize: "13px", color: "#64748b" }}>Cəmi ödəniş</div>
+                  <div
+                    style={{
+                      fontSize: isMobile ? "22px" : "28px",
+                      fontWeight: 800,
+                      marginTop: "6px",
+                      lineHeight: 1.2,
+                      wordBreak: "break-word",
+                    }}
+                  >
                     {formatMoney(totalPayment)}
                   </div>
                 </div>
