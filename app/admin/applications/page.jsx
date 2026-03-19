@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-const applications = [
+const defaultApplications = [
   {
     id: 1,
     name: "Elvin Məmmədov",
@@ -17,6 +17,8 @@ const applications = [
     salaryLabel: "900 AZN",
     status: "Yeni",
     date: "2026-03-19",
+    workplace: "Azersun",
+    note: "İlkin yoxlama gözləyir",
   },
   {
     id: 2,
@@ -30,6 +32,8 @@ const applications = [
     salaryLabel: "1 500 AZN",
     status: "Baxılır",
     date: "2026-03-18",
+    workplace: "Şəxsi biznes",
+    note: "Sənədlər dəqiqləşdirilir",
   },
   {
     id: 3,
@@ -43,6 +47,8 @@ const applications = [
     salaryLabel: "2 500 AZN",
     status: "Göndərildi",
     date: "2026-03-17",
+    workplace: "SOCAR",
+    note: "Banka yönləndirilib",
   },
   {
     id: 4,
@@ -56,6 +62,8 @@ const applications = [
     salaryLabel: "700 AZN",
     status: "Yeni",
     date: "2026-03-19",
+    workplace: "Kontakt Home",
+    note: "Əlavə əlaqə tələb olunur",
   },
   {
     id: 5,
@@ -69,6 +77,8 @@ const applications = [
     salaryLabel: "1 100 AZN",
     status: "Baxılır",
     date: "2026-03-16",
+    workplace: "Bravo",
+    note: "Operator baxışındadır",
   },
   {
     id: 6,
@@ -82,6 +92,8 @@ const applications = [
     salaryLabel: "3 200 AZN",
     status: "Yeni",
     date: "2026-03-15",
+    workplace: "PAŞA Holding",
+    note: "Yüksək prioritet lead",
   },
 ];
 
@@ -100,9 +112,23 @@ function getStatusStyles(status) {
     };
   }
 
+  if (status === "Göndərildi") {
+    return {
+      background: "#dcfce7",
+      color: "#166534",
+    };
+  }
+
+  if (status === "Rədd edildi") {
+    return {
+      background: "#fee2e2",
+      color: "#991b1b",
+    };
+  }
+
   return {
-    background: "#dcfce7",
-    color: "#166534",
+    background: "#e2e8f0",
+    color: "#334155",
   };
 }
 
@@ -156,6 +182,7 @@ function matchesDateFilter(itemDate, filter) {
 export default function ApplicationsPage() {
   const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [applications, setApplications] = useState([]);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -179,6 +206,18 @@ export default function ApplicationsPage() {
       if (parsed.role !== "super_admin" && parsed.role !== "admin") {
         router.push("/login");
         return;
+      }
+
+      const storedApplications = localStorage.getItem("valyutacred_applications");
+
+      if (storedApplications) {
+        setApplications(JSON.parse(storedApplications));
+      } else {
+        localStorage.setItem(
+          "valyutacred_applications",
+          JSON.stringify(defaultApplications)
+        );
+        setApplications(defaultApplications);
       }
 
       setIsCheckingAuth(false);
@@ -214,7 +253,7 @@ export default function ApplicationsPage() {
         matchesDate
       );
     });
-  }, [search, status, bank, creditType, salaryRange, amountRange, dateFilter]);
+  }, [applications, search, status, bank, creditType, salaryRange, amountRange, dateFilter]);
 
   function resetFilters() {
     setSearch("");
@@ -345,6 +384,7 @@ export default function ApplicationsPage() {
               <option value="Yeni">Yeni</option>
               <option value="Baxılır">Baxılır</option>
               <option value="Göndərildi">Göndərildi</option>
+              <option value="Rədd edildi">Rədd edildi</option>
             </select>
 
             <select
@@ -498,7 +538,7 @@ export default function ApplicationsPage() {
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
-                minWidth: "1050px",
+                minWidth: "1100px",
               }}
             >
               <thead>
