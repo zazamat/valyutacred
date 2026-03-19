@@ -219,7 +219,7 @@ export default function Page() {
             }}
           >
             <Link
-  href="/admin"
+  href="/login"
   style={{
     background: "#fff",
     color: "#0f172a",
