@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
-const applications = [
+const defaultApplications = [
   {
     id: 1,
     name: "Elvin Məmmədov",
@@ -97,6 +97,38 @@ const applications = [
   },
 ];
 
+function loadApplicationsFromStorage() {
+  try {
+    const stored = localStorage.getItem("valyutacred_applications");
+
+    if (!stored) {
+      localStorage.setItem(
+        "valyutacred_applications",
+        JSON.stringify(defaultApplications)
+      );
+      return defaultApplications;
+    }
+
+    const parsed = JSON.parse(stored);
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      localStorage.setItem(
+        "valyutacred_applications",
+        JSON.stringify(defaultApplications)
+      );
+      return defaultApplications;
+    }
+
+    return parsed;
+  } catch (error) {
+    localStorage.setItem(
+      "valyutacred_applications",
+      JSON.stringify(defaultApplications)
+    );
+    return defaultApplications;
+  }
+}
+
 function getStatusStyles(status) {
   if (status === "Yeni") {
     return {
@@ -137,6 +169,7 @@ export default function ApplicationDetailPage() {
   const params = useParams();
 
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [applications, setApplications] = useState([]);
   const [currentStatus, setCurrentStatus] = useState("");
   const [currentNote, setCurrentNote] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
@@ -157,6 +190,7 @@ export default function ApplicationDetailPage() {
         return;
       }
 
+      setApplications(loadApplicationsFromStorage());
       setIsCheckingAuth(false);
     } catch (error) {
       localStorage.removeItem("valyutacred_auth");
@@ -166,7 +200,7 @@ export default function ApplicationDetailPage() {
 
   const application = useMemo(() => {
     return applications.find((item) => String(item.id) === String(params.id));
-  }, [params.id]);
+  }, [applications, params.id]);
 
   useEffect(() => {
     if (application) {
@@ -221,6 +255,27 @@ export default function ApplicationDetailPage() {
   }
 
   const statusStyles = getStatusStyles(currentStatus);
+
+  function handleSave() {
+    const updatedApplications = applications.map((item) => {
+      if (item.id === application.id) {
+        return {
+          ...item,
+          status: currentStatus,
+          note: currentNote,
+        };
+      }
+
+      return item;
+    });
+
+    setApplications(updatedApplications);
+    localStorage.setItem(
+      "valyutacred_applications",
+      JSON.stringify(updatedApplications)
+    );
+    setSaveMessage("Dəyişikliklər yadda saxlanıldı");
+  }
 
   return (
     <div
@@ -284,7 +339,7 @@ export default function ApplicationDetailPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)",
+            gridTemplateColumns: "1fr",
             gap: "20px",
           }}
         >
@@ -320,7 +375,7 @@ export default function ApplicationDetailPage() {
                 }}
               >
                 <div style={{ fontSize: "13px", color: "#64748b" }}>Telefon</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px" }}>
+                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px", wordBreak: "break-word" }}>
                   {application.phone}
                 </div>
               </div>
@@ -390,7 +445,7 @@ export default function ApplicationDetailPage() {
                 }}
               >
                 <div style={{ fontSize: "13px", color: "#64748b" }}>İş yeri</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px" }}>
+                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px", wordBreak: "break-word" }}>
                   {application.workplace}
                 </div>
               </div>
@@ -406,7 +461,7 @@ export default function ApplicationDetailPage() {
               }}
             >
               <div style={{ fontSize: "14px", color: "#64748b" }}>Mövcud qeyd</div>
-              <div style={{ marginTop: "8px", fontSize: "15px", lineHeight: 1.7 }}>
+              <div style={{ marginTop: "8px", fontSize: "15px", lineHeight: 1.7, wordBreak: "break-word" }}>
                 {currentNote || "Qeyd yoxdur"}
               </div>
             </div>
@@ -465,6 +520,7 @@ export default function ApplicationDetailPage() {
                     fontSize: "14px",
                     background: "#fff",
                     outline: "none",
+                    boxSizing: "border-box",
                   }}
                 >
                   <option value="Yeni">Yeni</option>
@@ -503,9 +559,7 @@ export default function ApplicationDetailPage() {
               </div>
 
               <button
-                onClick={() => {
-                  setSaveMessage("Dəyişikliklər yadda saxlanıldı");
-                }}
+                onClick={handleSave}
                 style={{
                   marginTop: "16px",
                   width: "100%",
@@ -551,7 +605,7 @@ export default function ApplicationDetailPage() {
                 Qeyd
               </div>
               <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                Bu mərhələdə dəyişiklik yalnız interfeysdə saxlanılır. Sonrakı addımda status və qeyd real data ilə bağlanacaq.
+                Bu mərhələdə dəyişiklik localStorage üzərində saxlanılır. Sonrakı addımda status və qeyd real backend və databaza ilə bağlanacaq.
               </p>
             </div>
           </div>
