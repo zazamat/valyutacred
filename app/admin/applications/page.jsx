@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 const defaultApplications = [
   {
@@ -97,6 +97,38 @@ const defaultApplications = [
   },
 ];
 
+function loadApplicationsFromStorage() {
+  try {
+    const stored = localStorage.getItem("valyutacred_applications");
+
+    if (!stored) {
+      localStorage.setItem(
+        "valyutacred_applications",
+        JSON.stringify(defaultApplications)
+      );
+      return defaultApplications;
+    }
+
+    const parsed = JSON.parse(stored);
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      localStorage.setItem(
+        "valyutacred_applications",
+        JSON.stringify(defaultApplications)
+      );
+      return defaultApplications;
+    }
+
+    return parsed;
+  } catch (error) {
+    localStorage.setItem(
+      "valyutacred_applications",
+      JSON.stringify(defaultApplications)
+    );
+    return defaultApplications;
+  }
+}
+
 function getStatusStyles(status) {
   if (status === "Yeni") {
     return {
@@ -132,15 +164,65 @@ function getStatusStyles(status) {
   };
 }
 
-export default function ApplicationDetailPage() {
-  const router = useRouter();
-  const params = useParams();
+function matchesSalaryRange(salary, range) {
+  if (!range) return true;
+  if (range === "0-500") return salary >= 0 && salary <= 500;
+  if (range === "500-1000") return salary > 500 && salary <= 1000;
+  if (range === "1000-2000") return salary > 1000 && salary <= 2000;
+  if (range === "2000+") return salary > 2000;
+  return true;
+}
 
+function matchesAmountRange(amount, range) {
+  if (!range) return true;
+  if (range === "0-5000") return amount >= 0 && amount <= 5000;
+  if (range === "5000-10000") return amount > 5000 && amount <= 10000;
+  if (range === "10000-50000") return amount > 10000 && amount <= 50000;
+  if (range === "50000+") return amount > 50000;
+  return true;
+}
+
+function matchesDateFilter(itemDate, filter) {
+  if (!filter) return true;
+
+  const today = new Date("2026-03-19");
+  const createdAt = new Date(itemDate);
+
+  if (filter === "today") {
+    return itemDate === "2026-03-19";
+  }
+
+  if (filter === "yesterday") {
+    return itemDate === "2026-03-18";
+  }
+
+  if (filter === "7days") {
+    const diffMs = today - createdAt;
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return diffDays >= 0 && diffDays <= 7;
+  }
+
+  if (filter === "30days") {
+    const diffMs = today - createdAt;
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return diffDays >= 0 && diffDays <= 30;
+  }
+
+  return true;
+}
+
+export default function ApplicationsPage() {
+  const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [applications, setApplications] = useState([]);
-  const [currentStatus, setCurrentStatus] = useState("");
-  const [currentNote, setCurrentNote] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [bank, setBank] = useState("");
+  const [creditType, setCreditType] = useState("");
+  const [salaryRange, setSalaryRange] = useState("");
+  const [amountRange, setAmountRange] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
 
   useEffect(() => {
     try {
@@ -158,18 +240,7 @@ export default function ApplicationDetailPage() {
         return;
       }
 
-      const storedApplications = localStorage.getItem("valyutacred_applications");
-
-      if (storedApplications) {
-        setApplications(JSON.parse(storedApplications));
-      } else {
-        localStorage.setItem(
-          "valyutacred_applications",
-          JSON.stringify(defaultApplications)
-        );
-        setApplications(defaultApplications);
-      }
-
+      setApplications(loadApplicationsFromStorage());
       setIsCheckingAuth(false);
     } catch (error) {
       localStorage.removeItem("valyutacred_auth");
@@ -177,83 +248,66 @@ export default function ApplicationDetailPage() {
     }
   }, [router]);
 
-  const application = useMemo(() => {
-    return applications.find((item) => String(item.id) === String(params.id));
-  }, [applications, params.id]);
-
   useEffect(() => {
-    if (application) {
-      setCurrentStatus(application.status);
-      setCurrentNote(application.note || "");
+    function refreshApplications() {
+      setApplications(loadApplicationsFromStorage());
     }
-  }, [application]);
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refreshApplications();
+      }
+    }
+
+    window.addEventListener("focus", refreshApplications);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshApplications);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  const filteredApplications = useMemo(() => {
+    return applications.filter((item) => {
+      const normalizedSearch = search.trim().toLowerCase();
+
+      const matchesSearch =
+        !normalizedSearch ||
+        item.name.toLowerCase().includes(normalizedSearch) ||
+        item.phone.toLowerCase().includes(normalizedSearch);
+
+      const matchesStatus = !status || item.status === status;
+      const matchesBank = !bank || item.bank === bank;
+      const matchesType = !creditType || item.type === creditType;
+      const matchesSalary = matchesSalaryRange(item.salary, salaryRange);
+      const matchesAmount = matchesAmountRange(item.amount, amountRange);
+      const matchesDate = matchesDateFilter(item.date, dateFilter);
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesBank &&
+        matchesType &&
+        matchesSalary &&
+        matchesAmount &&
+        matchesDate
+      );
+    });
+  }, [applications, search, status, bank, creditType, salaryRange, amountRange, dateFilter]);
+
+  function resetFilters() {
+    setSearch("");
+    setStatus("");
+    setBank("");
+    setCreditType("");
+    setSalaryRange("");
+    setAmountRange("");
+    setDateFilter("");
+  }
 
   if (isCheckingAuth) {
     return null;
-  }
-
-  if (!application) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "#f8fafc",
-          fontFamily: "Arial, sans-serif",
-          padding: "40px 20px",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "900px",
-            margin: "0 auto",
-            background: "#fff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "24px",
-            padding: "24px",
-          }}
-        >
-          <h1 style={{ marginTop: 0, fontSize: "28px" }}>Müraciət tapılmadı</h1>
-          <Link
-            href="/admin/applications"
-            style={{
-              display: "inline-block",
-              marginTop: "12px",
-              textDecoration: "none",
-              background: "#059669",
-              color: "#fff",
-              padding: "10px 16px",
-              borderRadius: "12px",
-              fontWeight: 700,
-            }}
-          >
-            Müraciətlərə qayıt
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const statusStyles = getStatusStyles(currentStatus);
-
-  function handleSave() {
-    const updatedApplications = applications.map((item) => {
-      if (item.id === application.id) {
-        return {
-          ...item,
-          status: currentStatus,
-          note: currentNote,
-        };
-      }
-
-      return item;
-    });
-
-    setApplications(updatedApplications);
-    localStorage.setItem(
-      "valyutacred_applications",
-      JSON.stringify(updatedApplications)
-    );
-    setSaveMessage("Dəyişikliklər yadda saxlanıldı");
   }
 
   return (
@@ -288,16 +342,16 @@ export default function ApplicationDetailPage() {
         >
           <div>
             <div style={{ fontSize: "24px", fontWeight: 800, color: "#047857" }}>
-              Müraciət detalı
+              Müraciətlər
             </div>
             <div style={{ fontSize: "14px", color: "#64748b", marginTop: "4px" }}>
-              #{application.id} — {application.name}
+              Bütün kredit müraciətlərinin siyahısı
             </div>
           </div>
 
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
             <Link
-              href="/admin/applications"
+              href="/admin"
               style={{
                 background: "#fff",
                 color: "#0f172a",
@@ -308,7 +362,7 @@ export default function ApplicationDetailPage() {
                 fontWeight: 700,
               }}
             >
-              Müraciətlərə qayıt
+              Admin panelə qayıt
             </Link>
           </div>
         </div>
@@ -318,274 +372,313 @@ export default function ApplicationDetailPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)",
-            gap: "20px",
+            gap: "16px",
+            marginBottom: "20px",
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "24px",
+            padding: "20px",
+            boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
           }}
         >
-          <div
-            style={{
-              background: "#fff",
-              border: "1px solid #e2e8f0",
-              borderRadius: "24px",
-              padding: "24px",
-              boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
-            }}
-          >
-            <div style={{ marginBottom: "20px" }}>
-              <div style={{ fontSize: "28px", fontWeight: 800 }}>{application.name}</div>
-              <div style={{ fontSize: "14px", color: "#64748b", marginTop: "8px" }}>
-                Müraciət tarixi: {application.date}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "16px",
-              }}
-            >
-              <div
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "#f8fafc",
-                }}
-              >
-                <div style={{ fontSize: "13px", color: "#64748b" }}>Telefon</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px" }}>
-                  {application.phone}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "#f8fafc",
-                }}
-              >
-                <div style={{ fontSize: "13px", color: "#64748b" }}>Bank</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px" }}>
-                  {application.bank}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "#f8fafc",
-                }}
-              >
-                <div style={{ fontSize: "13px", color: "#64748b" }}>Kredit növü</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px" }}>
-                  {application.type}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "#f8fafc",
-                }}
-              >
-                <div style={{ fontSize: "13px", color: "#64748b" }}>Kredit məbləği</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px" }}>
-                  {application.amountLabel}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "#f8fafc",
-                }}
-              >
-                <div style={{ fontSize: "13px", color: "#64748b" }}>Maaş</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px" }}>
-                  {application.salaryLabel}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "#f8fafc",
-                }}
-              >
-                <div style={{ fontSize: "13px", color: "#64748b" }}>İş yeri</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: "8px" }}>
-                  {application.workplace}
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                marginTop: "20px",
-                background: "#fff",
-                border: "1px solid #e2e8f0",
-                borderRadius: "18px",
-                padding: "18px",
-              }}
-            >
-              <div style={{ fontSize: "14px", color: "#64748b" }}>Mövcud qeyd</div>
-              <div style={{ marginTop: "8px", fontSize: "15px", lineHeight: 1.7 }}>
-                {currentNote || "Qeyd yoxdur"}
-              </div>
+          <div>
+            <div style={{ fontSize: "22px", fontWeight: 800 }}>Filtrlər</div>
+            <div style={{ fontSize: "14px", color: "#64748b", marginTop: "6px" }}>
+              Müraciətləri filtr et və uyğun lead-ləri tap
             </div>
           </div>
 
           <div
             style={{
               display: "grid",
-              gap: "20px",
-              alignContent: "start",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "12px",
             }}
           >
-            <div
+            <input
+              type="text"
+              placeholder="Ad və ya telefon axtar"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               style={{
+                padding: "12px 14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "14px",
+                outline: "none",
+                width: "100%",
+                boxSizing: "border-box",
+              }}
+            />
+
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              style={{
+                padding: "12px 14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "14px",
                 background: "#fff",
-                border: "1px solid #e2e8f0",
-                borderRadius: "24px",
-                padding: "20px",
-                boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+                outline: "none",
+                width: "100%",
               }}
             >
-              <div style={{ fontSize: "20px", fontWeight: 800, marginBottom: "14px" }}>
-                Cari status
-              </div>
+              <option value="">Bütün statuslar</option>
+              <option value="Yeni">Yeni</option>
+              <option value="Baxılır">Baxılır</option>
+              <option value="Göndərildi">Göndərildi</option>
+              <option value="Rədd edildi">Rədd edildi</option>
+            </select>
 
-              <span
-                style={{
-                  display: "inline-block",
-                  padding: "8px 12px",
-                  borderRadius: "999px",
-                  background: statusStyles.background,
-                  color: statusStyles.color,
-                  fontWeight: 700,
-                  fontSize: "13px",
-                }}
-              >
-                {currentStatus}
-              </span>
-
-              <div style={{ marginTop: "18px" }}>
-                <div style={{ fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
-                  Statusu dəyiş
-                </div>
-
-                <select
-                  value={currentStatus}
-                  onChange={(e) => {
-                    setCurrentStatus(e.target.value);
-                    setSaveMessage("");
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "12px",
-                    fontSize: "14px",
-                    background: "#fff",
-                    outline: "none",
-                  }}
-                >
-                  <option value="Yeni">Yeni</option>
-                  <option value="Baxılır">Baxılır</option>
-                  <option value="Göndərildi">Göndərildi</option>
-                  <option value="Rədd edildi">Rədd edildi</option>
-                </select>
-              </div>
-
-              <div style={{ marginTop: "18px" }}>
-                <div style={{ fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
-                  Operator qeydi
-                </div>
-
-                <textarea
-                  value={currentNote}
-                  onChange={(e) => {
-                    setCurrentNote(e.target.value);
-                    setSaveMessage("");
-                  }}
-                  rows={6}
-                  placeholder="Qeyd əlavə et..."
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "12px",
-                    fontSize: "14px",
-                    background: "#fff",
-                    outline: "none",
-                    resize: "vertical",
-                    fontFamily: "Arial, sans-serif",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <button
-                onClick={handleSave}
-                style={{
-                  marginTop: "16px",
-                  width: "100%",
-                  background: "#059669",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "12px",
-                  padding: "12px 16px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Yadda saxla
-              </button>
-
-              {saveMessage ? (
-                <div
-                  style={{
-                    marginTop: "12px",
-                    fontSize: "14px",
-                    color: "#166534",
-                    background: "#dcfce7",
-                    border: "1px solid #bbf7d0",
-                    borderRadius: "12px",
-                    padding: "10px 12px",
-                  }}
-                >
-                  {saveMessage}
-                </div>
-              ) : null}
-            </div>
-
-            <div
+            <select
+              value={bank}
+              onChange={(e) => setBank(e.target.value)}
               style={{
+                padding: "12px 14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "14px",
                 background: "#fff",
-                border: "1px solid #e2e8f0",
-                borderRadius: "24px",
-                padding: "20px",
-                boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+                outline: "none",
+                width: "100%",
               }}
             >
-              <div style={{ fontSize: "20px", fontWeight: 800, marginBottom: "10px" }}>
-                Qeyd
-              </div>
-              <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                Bu mərhələdə dəyişiklik localStorage üzərində saxlanılır. Sonrakı addımda status və qeyd real backend və databaza ilə bağlanacaq.
-              </p>
+              <option value="">Bütün banklar</option>
+              <option value="Kapital Bank">Kapital Bank</option>
+              <option value="ABB">ABB</option>
+              <option value="Unibank">Unibank</option>
+              <option value="Yelo Bank">Yelo Bank</option>
+            </select>
+
+            <select
+              value={creditType}
+              onChange={(e) => setCreditType(e.target.value)}
+              style={{
+                padding: "12px 14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "14px",
+                background: "#fff",
+                outline: "none",
+                width: "100%",
+              }}
+            >
+              <option value="">Bütün kredit növləri</option>
+              <option value="Nağd kredit">Nağd kredit</option>
+              <option value="Biznes krediti">Biznes krediti</option>
+              <option value="İpoteka">İpoteka</option>
+              <option value="Kart krediti">Kart krediti</option>
+            </select>
+
+            <select
+              value={salaryRange}
+              onChange={(e) => setSalaryRange(e.target.value)}
+              style={{
+                padding: "12px 14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "14px",
+                background: "#fff",
+                outline: "none",
+                width: "100%",
+              }}
+            >
+              <option value="">Bütün maaşlar</option>
+              <option value="0-500">0 - 500 AZN</option>
+              <option value="500-1000">500 - 1000 AZN</option>
+              <option value="1000-2000">1000 - 2000 AZN</option>
+              <option value="2000+">2000+ AZN</option>
+            </select>
+
+            <select
+              value={amountRange}
+              onChange={(e) => setAmountRange(e.target.value)}
+              style={{
+                padding: "12px 14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "14px",
+                background: "#fff",
+                outline: "none",
+                width: "100%",
+              }}
+            >
+              <option value="">Bütün məbləğlər</option>
+              <option value="0-5000">0 - 5 000 AZN</option>
+              <option value="5000-10000">5 000 - 10 000 AZN</option>
+              <option value="10000-50000">10 000 - 50 000 AZN</option>
+              <option value="50000+">50 000+ AZN</option>
+            </select>
+
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              style={{
+                padding: "12px 14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "14px",
+                background: "#fff",
+                outline: "none",
+                width: "100%",
+              }}
+            >
+              <option value="">Bütün tarixlər</option>
+              <option value="today">Bu gün</option>
+              <option value="yesterday">Dünən</option>
+              <option value="7days">Son 7 gün</option>
+              <option value="30days">Son 30 gün</option>
+            </select>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ fontSize: "14px", color: "#475569" }}>
+              Tapılan müraciət sayı: <strong>{filteredApplications.length}</strong>
             </div>
+
+            <button
+              onClick={resetFilters}
+              style={{
+                background: "#fff",
+                color: "#0f172a",
+                border: "1px solid #cbd5e1",
+                borderRadius: "12px",
+                padding: "10px 16px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "24px",
+            overflow: "hidden",
+            boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+          }}
+        >
+          <div
+            style={{
+              padding: "20px",
+              borderBottom: "1px solid #e2e8f0",
+            }}
+          >
+            <div style={{ fontSize: "22px", fontWeight: 800 }}>Müraciət siyahısı</div>
+            <div style={{ fontSize: "14px", color: "#64748b", marginTop: "6px" }}>
+              Filtrlənmiş nəticələr
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                minWidth: "1100px",
+              }}
+            >
+              <thead>
+                <tr style={{ background: "#f8fafc", textAlign: "left" }}>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>ID</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Ad</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Telefon</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Bank</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Kredit növü</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Maaş</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Məbləğ</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Tarix</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Status</th>
+                  <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Əməliyyat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredApplications.length > 0 ? (
+                  filteredApplications.map((item) => {
+                    const statusStyles = getStatusStyles(item.status);
+
+                    return (
+                      <tr key={item.id}>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          #{item.id}
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          {item.name}
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          {item.phone}
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          {item.bank}
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          {item.type}
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          {item.salaryLabel}
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          {item.amountLabel}
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          {item.date}
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              padding: "6px 10px",
+                              borderRadius: "999px",
+                              background: statusStyles.background,
+                              color: statusStyles.color,
+                              fontWeight: 700,
+                              fontSize: "12px",
+                            }}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                          <Link
+                            href={`/admin/applications/${item.id}`}
+                            style={{
+                              display: "inline-block",
+                              background: "#fff",
+                              color: "#0f172a",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: "10px",
+                              padding: "8px 12px",
+                              textDecoration: "none",
+                              fontWeight: 700,
+                            }}
+                          >
+                            Bax
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={10}
+                      style={{
+                        padding: "24px 16px",
+                        textAlign: "center",
+                        color: "#64748b",
+                      }}
+                    >
+                      Heç bir nəticə tapılmadı
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </main>
