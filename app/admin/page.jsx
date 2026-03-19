@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";"use client";
+
 import Link from "next/link";
 
 const cards = [
