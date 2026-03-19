@@ -42,11 +42,8 @@ const FEATURED_NEWS = {
 };
 
 function formatMoney(value) {
-  return new Intl.NumberFormat("az-AZ", {
-    style: "currency",
-    currency: "AZN",
-    maximumFractionDigits: 2,
-  }).format(value || 0);
+  const rounded = Math.round(value || 0);
+  return new Intl.NumberFormat("az-AZ").format(rounded) + " AZN";
 }
 
 function calculateMonthlyPayment(principal, annualRate, months) {
@@ -637,13 +634,14 @@ export default function Page() {
                   <label
                     style={{
                       display: "flex",
-                      alignItems: "flex-start",
+                      alignItems: "center",
                       gap: "12px",
-                      border: leadType === "exclusive" ? "1px solid #059669" : "1px solid #e2e8f0",
+                      border: leadType === "exclusive" ? "2px solid #059669" : "1px solid #e2e8f0",
                       background: leadType === "exclusive" ? "#ecfdf5" : "#fff",
                       borderRadius: "16px",
-                      padding: "14px",
+                      padding: isMobile ? "14px" : "16px",
                       cursor: "pointer",
+                      transition: "all 0.2s",
                     }}
                   >
                     <input
@@ -652,10 +650,21 @@ export default function Page() {
                       value="exclusive"
                       checked={leadType === "exclusive"}
                       onChange={(e) => setLeadType(e.target.value)}
-                      style={{ marginTop: "3px" }}
+                      style={{
+                        width: "18px",
+                        height: "18px",
+                        flexShrink: 0,
+                        margin: 0,
+                      }}
                     />
-                    <div>
-                      <div style={{ color: "#0f172a", fontWeight: 700 }}>
+                    <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          color: "#0f172a",
+                          fontWeight: 700,
+                          fontSize: isMobile ? "15px" : "16px",
+                        }}
+                      >
                         Yalnız seçdiyim bankdan
                       </div>
                     </div>
@@ -664,13 +673,14 @@ export default function Page() {
                   <label
                     style={{
                       display: "flex",
-                      alignItems: "flex-start",
+                      alignItems: "center",
                       gap: "12px",
-                      border: leadType === "shared" ? "1px solid #059669" : "1px solid #e2e8f0",
+                      border: leadType === "shared" ? "2px solid #059669" : "1px solid #e2e8f0",
                       background: leadType === "shared" ? "#ecfdf5" : "#fff",
                       borderRadius: "16px",
-                      padding: "14px",
+                      padding: isMobile ? "14px" : "16px",
                       cursor: "pointer",
+                      transition: "all 0.2s",
                     }}
                   >
                     <input
@@ -679,10 +689,22 @@ export default function Page() {
                       value="shared"
                       checked={leadType === "shared"}
                       onChange={(e) => setLeadType(e.target.value)}
-                      style={{ marginTop: "3px" }}
+                      style={{
+                        width: "18px",
+                        height: "18px",
+                        flexShrink: 0,
+                        margin: 0,
+                      }}
                     />
-                    <div>
-                      <div style={{ color: "#0f172a", fontWeight: 700 }}>
+                    <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          color: "#0f172a",
+                          fontWeight: 700,
+                          fontSize: isMobile ? "15px" : "16px",
+                          lineHeight: 1.5,
+                        }}
+                      >
                         Digər banklardan da təklif almaq istəyirəm
                       </div>
                     </div>
@@ -840,7 +862,7 @@ export default function Page() {
                         borderRadius: "14px",
                         padding: "14px 16px",
                         color: "#475569",
-                        fontSize: "14px",
+                        fontSize: isMobile ? "15px" : "14px",
                         lineHeight: 1.6,
                       }}
                     >
