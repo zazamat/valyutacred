@@ -138,6 +138,8 @@ export default function ApplicationDetailPage() {
 
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [currentStatus, setCurrentStatus] = useState("");
+  const [currentNote, setCurrentNote] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
 
   useEffect(() => {
     try {
@@ -169,6 +171,7 @@ export default function ApplicationDetailPage() {
   useEffect(() => {
     if (application) {
       setCurrentStatus(application.status);
+      setCurrentNote(application.note || "");
     }
   }, [application]);
 
@@ -402,9 +405,9 @@ export default function ApplicationDetailPage() {
                 padding: "18px",
               }}
             >
-              <div style={{ fontSize: "14px", color: "#64748b" }}>Qeyd</div>
+              <div style={{ fontSize: "14px", color: "#64748b" }}>Mövcud qeyd</div>
               <div style={{ marginTop: "8px", fontSize: "15px", lineHeight: 1.7 }}>
-                {application.note}
+                {currentNote || "Qeyd yoxdur"}
               </div>
             </div>
           </div>
@@ -450,7 +453,10 @@ export default function ApplicationDetailPage() {
 
                 <select
                   value={currentStatus}
-                  onChange={(e) => setCurrentStatus(e.target.value)}
+                  onChange={(e) => {
+                    setCurrentStatus(e.target.value);
+                    setSaveMessage("");
+                  }}
                   style={{
                     width: "100%",
                     padding: "12px 14px",
@@ -467,6 +473,69 @@ export default function ApplicationDetailPage() {
                   <option value="Rədd edildi">Rədd edildi</option>
                 </select>
               </div>
+
+              <div style={{ marginTop: "18px" }}>
+                <div style={{ fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
+                  Operator qeydi
+                </div>
+
+                <textarea
+                  value={currentNote}
+                  onChange={(e) => {
+                    setCurrentNote(e.target.value);
+                    setSaveMessage("");
+                  }}
+                  rows={6}
+                  placeholder="Qeyd əlavə et..."
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "12px",
+                    fontSize: "14px",
+                    background: "#fff",
+                    outline: "none",
+                    resize: "vertical",
+                    fontFamily: "Arial, sans-serif",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={() => {
+                  setSaveMessage("Dəyişikliklər yadda saxlanıldı");
+                }}
+                style={{
+                  marginTop: "16px",
+                  width: "100%",
+                  background: "#059669",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Yadda saxla
+              </button>
+
+              {saveMessage ? (
+                <div
+                  style={{
+                    marginTop: "12px",
+                    fontSize: "14px",
+                    color: "#166534",
+                    background: "#dcfce7",
+                    border: "1px solid #bbf7d0",
+                    borderRadius: "12px",
+                    padding: "10px 12px",
+                  }}
+                >
+                  {saveMessage}
+                </div>
+              ) : null}
             </div>
 
             <div
@@ -482,7 +551,7 @@ export default function ApplicationDetailPage() {
                 Qeyd
               </div>
               <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                Bu status dəyişimi hələ demo görnüşündədir. Səhifə yenilənəndə əvvəlki vəziyyətə qayıdacaq.
+                Bu mərhələdə dəyişiklik yalnız interfeysdə saxlanılır. Sonrakı addımda status və qeyd real data ilə bağlanacaq.
               </p>
             </div>
           </div>
