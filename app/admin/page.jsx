@@ -57,6 +57,7 @@ const leads = [
 export default function AdminPage() {
   const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     try {
@@ -80,6 +81,19 @@ export default function AdminPage() {
       router.push("/login");
     }
   }, [router]);
+
+  useEffect(() => {
+    function checkMobile() {
+      setIsMobile(window.innerWidth < 992);
+    }
+
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+
+    return () => {
+      window.removeEventListener("resize", checkMobile);
+    };
+  }, []);
 
   if (isCheckingAuth) {
     return null;
@@ -110,9 +124,10 @@ export default function AdminPage() {
             padding: "18px 20px",
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "center",
+            alignItems: isMobile ? "flex-start" : "center",
             gap: "16px",
             flexWrap: "wrap",
+            flexDirection: isMobile ? "column" : "row",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -128,21 +143,36 @@ export default function AdminPage() {
                 justifyContent: "center",
                 fontWeight: 700,
                 fontSize: "22px",
+                flexShrink: 0,
               }}
             >
               ₼
             </div>
             <div>
-              <div style={{ fontSize: "20px", fontWeight: 800, color: "#047857" }}>
+              <div
+                style={{
+                  fontSize: isMobile ? "18px" : "20px",
+                  fontWeight: 800,
+                  color: "#047857",
+                  lineHeight: 1.2,
+                }}
+              >
                 ValyutaCred Admin
               </div>
-              <div style={{ fontSize: "13px", color: "#64748b" }}>
+              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>
                 Lead və müraciət idarəetmə paneli
               </div>
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+              flexWrap: "wrap",
+              width: isMobile ? "100%" : "auto",
+            }}
+          >
             <Link
               href="/"
               style={{
@@ -153,6 +183,8 @@ export default function AdminPage() {
                 padding: "10px 16px",
                 textDecoration: "none",
                 fontWeight: 700,
+                textAlign: "center",
+                flex: isMobile ? "1 1 160px" : "0 0 auto",
               }}
             >
               Sayta qayıt
@@ -167,6 +199,8 @@ export default function AdminPage() {
                 padding: "10px 16px",
                 fontWeight: 700,
                 cursor: "pointer",
+                textAlign: "center",
+                flex: isMobile ? "1 1 180px" : "0 0 auto",
               }}
             >
               Yeni bank əlavə et
@@ -193,10 +227,24 @@ export default function AdminPage() {
             >
               Admin panel
             </div>
-            <h1 style={{ fontSize: "36px", margin: 0, fontWeight: 800 }}>
+            <h1
+              style={{
+                fontSize: isMobile ? "28px" : "36px",
+                margin: 0,
+                fontWeight: 800,
+                lineHeight: 1.15,
+              }}
+            >
               Müraciətlər və platforma statistikası
             </h1>
-            <p style={{ fontSize: "16px", color: "#475569", lineHeight: 1.7, marginTop: "10px" }}>
+            <p
+              style={{
+                fontSize: "16px",
+                color: "#475569",
+                lineHeight: 1.7,
+                marginTop: "10px",
+              }}
+            >
               Buradan müraciətləri, bankları, statusları və ümumi axını idarə etmək mümkün olacaq.
             </p>
           </div>
@@ -204,7 +252,9 @@ export default function AdminPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gridTemplateColumns: isMobile
+                ? "1fr"
+                : "repeat(auto-fit, minmax(220px, 1fr))",
               gap: "16px",
               marginBottom: "28px",
             }}
@@ -221,10 +271,24 @@ export default function AdminPage() {
                 }}
               >
                 <div style={{ fontSize: "14px", color: "#64748b" }}>{card.title}</div>
-                <div style={{ fontSize: "34px", fontWeight: 800, color: "#059669", marginTop: "8px" }}>
+                <div
+                  style={{
+                    fontSize: "34px",
+                    fontWeight: 800,
+                    color: "#059669",
+                    marginTop: "8px",
+                  }}
+                >
                   {card.value}
                 </div>
-                <div style={{ fontSize: "14px", color: "#475569", marginTop: "8px", lineHeight: 1.6 }}>
+                <div
+                  style={{
+                    fontSize: "14px",
+                    color: "#475569",
+                    marginTop: "8px",
+                    lineHeight: 1.6,
+                  }}
+                >
                   {card.desc}
                 </div>
               </div>
@@ -234,7 +298,7 @@ export default function AdminPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)",
+              gridTemplateColumns: "1fr",
               gap: "20px",
             }}
           >
@@ -259,7 +323,9 @@ export default function AdminPage() {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: "22px", fontWeight: 800 }}>Son müraciətlər</div>
+                  <div style={{ fontSize: isMobile ? "20px" : "22px", fontWeight: 800 }}>
+                    Son müraciətlər
+                  </div>
                   <div style={{ fontSize: "14px", color: "#64748b", marginTop: "6px" }}>
                     Kredit müraciətlərinin cari siyahısı
                   </div>
@@ -341,6 +407,7 @@ export default function AdminPage() {
             <div
               style={{
                 display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
                 gap: "20px",
                 alignContent: "start",
               }}
@@ -390,22 +457,21 @@ export default function AdminPage() {
                   </button>
 
                   <Link
-  href="/admin/applications"
-  style={{
-    display: "block",
-    background: "#fff",
-    color: "#0f172a",
-    border: "1px solid #cbd5e1",
-    borderRadius: "14px",
-    padding: "12px 14px",
-    fontWeight: 700,
-    cursor: "pointer",
-    textAlign: "left",
-    textDecoration: "none",
-  }}
->
-  Statusları yenilə
-</Link>
+                    href="/admin/applications"
+                    style={{
+                      display: "block",
+                      background: "#fff",
+                      color: "#0f172a",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "14px",
+                      padding: "12px 14px",
+                      fontWeight: 700,
+                      textAlign: "left",
+                      textDecoration: "none",
+                    }}
+                  >
+                    Statusları yenilə
+                  </Link>
                 </div>
               </div>
 
