@@ -49,51 +49,6 @@ const defaultApplications = [
     workplace: "SOCAR",
     note: "Banka yönləndirilib",
   },
-  {
-    id: 4,
-    name: "Nigar Qasımova",
-    phone: "+994 51 333 22 11",
-    bank: "Yelo Bank",
-    type: "Kart krediti",
-    amount: 3500,
-    amountLabel: "3 500 AZN",
-    salary: 700,
-    salaryLabel: "700 AZN",
-    status: "Yeni",
-    date: "2026-03-19",
-    workplace: "Kontakt Home",
-    note: "Əlavə əlaqə tələb olunur",
-  },
-  {
-    id: 5,
-    name: "Rəşad Səfərli",
-    phone: "+994 12 555 44 33",
-    bank: "Kapital Bank",
-    type: "Nağd kredit",
-    amount: 7000,
-    amountLabel: "7 000 AZN",
-    salary: 1100,
-    salaryLabel: "1 100 AZN",
-    status: "Baxılır",
-    date: "2026-03-16",
-    workplace: "Bravo",
-    note: "Operator baxışındadır",
-  },
-  {
-    id: 6,
-    name: "Sevinc Məmmədli",
-    phone: "+994 77 888 99 00",
-    bank: "ABB",
-    type: "İpoteka",
-    amount: 60000,
-    amountLabel: "60 000 AZN",
-    salary: 3200,
-    salaryLabel: "3 200 AZN",
-    status: "Yeni",
-    date: "2026-03-15",
-    workplace: "PAŞA Holding",
-    note: "Yüksək prioritet lead",
-  },
 ];
 
 function loadApplicationsFromStorage() {
@@ -110,7 +65,7 @@ function loadApplicationsFromStorage() {
 
     const parsed = JSON.parse(stored);
 
-    if (!Array.isArray(parsed) || parsed.length === 0) {
+    if (!Array.isArray(parsed)) {
       localStorage.setItem(
         "valyutacred_applications",
         JSON.stringify(defaultApplications)
@@ -139,6 +94,9 @@ function getTodayString() {
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+const banks = ["Kapital Bank", "ABB", "Unibank", "Yelo Bank"];
+const loanTypes = ["Nağd kredit", "Biznes krediti", "İpoteka", "Kart krediti"];
 
 export default function HomePage() {
   const [form, setForm] = useState({
@@ -228,9 +186,7 @@ export default function HomePage() {
         workplace: "",
       });
 
-      setSuccessMessage(
-        "Müraciət uğurla göndərildi. Admin paneldə artıq görünür."
-      );
+      setSuccessMessage("Müraciət uğurla göndərildi. Məlumat admin panelə ötürüldü.");
     } catch (error) {
       alert("Xəta baş verdi. Yenidən cəhd edin.");
     } finally {
@@ -242,22 +198,27 @@ export default function HomePage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#f8fafc",
+        background:
+          "linear-gradient(180deg, #f8fafc 0%, #eefbf5 45%, #ffffff 100%)",
         color: "#0f172a",
         fontFamily: "Arial, sans-serif",
       }}
     >
       <header
         style={{
-          background: "#ffffff",
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          backdropFilter: "blur(10px)",
+          background: "rgba(255,255,255,0.9)",
           borderBottom: "1px solid #e2e8f0",
         }}
       >
         <div
           style={{
-            maxWidth: "1200px",
+            maxWidth: "1240px",
             margin: "0 auto",
-            padding: "18px 20px",
+            padding: "16px 20px",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -265,19 +226,39 @@ export default function HomePage() {
             flexWrap: "wrap",
           }}
         >
-          <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <div
               style={{
-                fontSize: "30px",
+                width: "46px",
+                height: "46px",
+                borderRadius: "14px",
+                background: "linear-gradient(135deg, #059669, #10b981)",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
                 fontWeight: 800,
-                color: "#047857",
-                lineHeight: 1.1,
+                fontSize: "22px",
+                boxShadow: "0 10px 25px rgba(5,150,105,0.25)",
+                flexShrink: 0,
               }}
             >
-              ValyutaCred
+              ₼
             </div>
-            <div style={{ fontSize: "14px", color: "#64748b", marginTop: "6px" }}>
-              Kredit müraciətlərinin toplanması və idarə olunması platforması
+            <div>
+              <div
+                style={{
+                  fontSize: "26px",
+                  fontWeight: 800,
+                  color: "#047857",
+                  lineHeight: 1.1,
+                }}
+              >
+                ValyutaCred
+              </div>
+              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>
+                Kredit müraciət və lead platforması
+              </div>
             </div>
           </div>
 
@@ -285,12 +266,12 @@ export default function HomePage() {
             <Link
               href="/login"
               style={{
-                background: "#fff",
+                textDecoration: "none",
                 color: "#0f172a",
                 border: "1px solid #cbd5e1",
-                borderRadius: "12px",
+                background: "#fff",
                 padding: "10px 16px",
-                textDecoration: "none",
+                borderRadius: "12px",
                 fontWeight: 700,
               }}
             >
@@ -300,12 +281,13 @@ export default function HomePage() {
             <Link
               href="/admin/applications"
               style={{
-                background: "#059669",
-                color: "#fff",
-                borderRadius: "12px",
-                padding: "10px 16px",
                 textDecoration: "none",
+                color: "#fff",
+                background: "linear-gradient(135deg, #059669, #10b981)",
+                padding: "10px 16px",
+                borderRadius: "12px",
                 fontWeight: 700,
+                boxShadow: "0 10px 25px rgba(5,150,105,0.22)",
               }}
             >
               Müraciətlər
@@ -315,110 +297,196 @@ export default function HomePage() {
       </header>
 
       <main>
-        <section style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 20px" }}>
+        <section style={{ maxWidth: "1240px", margin: "0 auto", padding: "36px 20px 24px" }}>
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
               gap: "24px",
-              alignItems: "start",
+              alignItems: "stretch",
             }}
           >
             <div
               style={{
-                background: "#ffffff",
-                border: "1px solid #e2e8f0",
-                borderRadius: "24px",
-                padding: "28px",
-                boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+                background:
+                  "linear-gradient(135deg, rgba(5,150,105,0.08), rgba(16,185,129,0.03))",
+                border: "1px solid #d1fae5",
+                borderRadius: "28px",
+                padding: "32px",
+                boxShadow: "0 18px 50px rgba(15,23,42,0.06)",
+                position: "relative",
+                overflow: "hidden",
               }}
             >
               <div
                 style={{
-                  display: "inline-block",
-                  background: "#ecfdf5",
-                  color: "#047857",
-                  border: "1px solid #a7f3d0",
+                  position: "absolute",
+                  top: "-40px",
+                  right: "-40px",
+                  width: "180px",
+                  height: "180px",
                   borderRadius: "999px",
-                  padding: "8px 14px",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  marginBottom: "16px",
+                  background: "rgba(16,185,129,0.10)",
                 }}
-              >
-                Onlayn müraciət
-              </div>
-
-              <h1
-                style={{
-                  fontSize: "36px",
-                  fontWeight: 800,
-                  lineHeight: 1.15,
-                  margin: 0,
-                }}
-              >
-                Kredit müraciətinizi indi göndərin
-              </h1>
-
-              <p
-                style={{
-                  marginTop: "14px",
-                  fontSize: "16px",
-                  lineHeight: 1.8,
-                  color: "#475569",
-                }}
-              >
-                Məlumatlarınızı daxil edin. Müraciət avtomatik olaraq admin panelə
-                düşəcək və operator tərəfindən yoxlanılacaq.
-              </p>
-
+              />
               <div
                 style={{
-                  marginTop: "24px",
-                  display: "grid",
-                  gap: "14px",
+                  position: "absolute",
+                  bottom: "-60px",
+                  left: "-50px",
+                  width: "200px",
+                  height: "200px",
+                  borderRadius: "999px",
+                  background: "rgba(5,150,105,0.08)",
                 }}
-              >
+              />
+
+              <div style={{ position: "relative", zIndex: 2 }}>
                 <div
                   style={{
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "16px",
-                    padding: "16px",
+                    display: "inline-block",
+                    background: "#ecfdf5",
+                    color: "#047857",
+                    border: "1px solid #a7f3d0",
+                    borderRadius: "999px",
+                    padding: "8px 14px",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    marginBottom: "16px",
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: "15px" }}>Sadə müraciət</div>
-                  <div style={{ fontSize: "14px", color: "#64748b", marginTop: "6px" }}>
-                    Login və qeydiyyat olmadan müraciət etmək mümkündür.
+                  Sürətli onlayn müraciət
+                </div>
+
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: "clamp(32px, 5vw, 54px)",
+                    lineHeight: 1.06,
+                    fontWeight: 800,
+                    letterSpacing: "-0.02em",
+                  }}
+                >
+                  Kredit müraciətini
+                  <span style={{ color: "#059669" }}> 1 dəqiqəyə </span>
+                  göndər
+                </h1>
+
+                <p
+                  style={{
+                    marginTop: "18px",
+                    fontSize: "17px",
+                    lineHeight: 1.8,
+                    color: "#475569",
+                    maxWidth: "680px",
+                  }}
+                >
+                  ValyutaCred vasitəsilə müraciətinizi rahat şəkildə göndərin. Daxil olan
+                  məlumat admin panelə ötürülür, yoxlanılır və sonrakı mərhələdə bank
+                  yönləndirməsinə hazırlanır.
+                </p>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: "14px",
+                    marginTop: "24px",
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "rgba(255,255,255,0.85)",
+                      border: "1px solid #dcfce7",
+                      borderRadius: "18px",
+                      padding: "16px",
+                    }}
+                  >
+                    <div style={{ fontSize: "28px", fontWeight: 800, color: "#059669" }}>
+                      4+
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#475569", marginTop: "6px" }}>
+                      Bank seçimi üçün baza
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      background: "rgba(255,255,255,0.85)",
+                      border: "1px solid #dcfce7",
+                      borderRadius: "18px",
+                      padding: "16px",
+                    }}
+                  >
+                    <div style={{ fontSize: "28px", fontWeight: 800, color: "#059669" }}>
+                      100%
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#475569", marginTop: "6px" }}>
+                      Admin panelə ötürülmə
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      background: "rgba(255,255,255,0.85)",
+                      border: "1px solid #dcfce7",
+                      borderRadius: "18px",
+                      padding: "16px",
+                    }}
+                  >
+                    <div style={{ fontSize: "28px", fontWeight: 800, color: "#059669" }}>
+                      24/7
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#475569", marginTop: "6px" }}>
+                      Onlayn müraciət imkanı
+                    </div>
                   </div>
                 </div>
 
                 <div
                   style={{
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "16px",
-                    padding: "16px",
+                    display: "grid",
+                    gap: "12px",
+                    marginTop: "24px",
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: "15px" }}>Admin nəzarəti</div>
-                  <div style={{ fontSize: "14px", color: "#64748b", marginTop: "6px" }}>
-                    Daxil olan müraciətlər admin paneldə görünür və statuslandırılır.
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "16px",
-                    padding: "16px",
-                  }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: "15px" }}>Gələcək genişlənmə</div>
-                  <div style={{ fontSize: "14px", color: "#64748b", marginTop: "6px" }}>
-                    Sonrakı mərhələdə bank kabineti, faizlər və məhsul təsdiqi əlavə olunacaq.
-                  </div>
+                  {[
+                    "Qeydiyyat olmadan müraciət göndərmək mümkündür",
+                    "Məlumatlar operator baxışı üçün sistemə düşür",
+                    "Sonrakı mərhələdə bank kabineti və məhsul təsdiqi əlavə olunacaq",
+                  ].map((item) => (
+                    <div
+                      key={item}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        color: "#334155",
+                        fontSize: "15px",
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "22px",
+                          height: "22px",
+                          borderRadius: "999px",
+                          background: "#dcfce7",
+                          color: "#166534",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "12px",
+                          fontWeight: 800,
+                          flexShrink: 0,
+                          marginTop: "1px",
+                        }}
+                      >
+                        ✓
+                      </div>
+                      <div>{item}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -427,16 +495,31 @@ export default function HomePage() {
               style={{
                 background: "#ffffff",
                 border: "1px solid #e2e8f0",
-                borderRadius: "24px",
+                borderRadius: "28px",
                 padding: "28px",
-                boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+                boxShadow: "0 20px 55px rgba(15,23,42,0.08)",
               }}
             >
-              <div style={{ fontSize: "28px", fontWeight: 800, marginBottom: "8px" }}>
-                Müraciət formu
-              </div>
-              <div style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px" }}>
-                Tələb olunan sahələri doldurun
+              <div style={{ marginBottom: "20px" }}>
+                <div
+                  style={{
+                    fontSize: "30px",
+                    fontWeight: 800,
+                    lineHeight: 1.1,
+                  }}
+                >
+                  Müraciət formu
+                </div>
+                <div
+                  style={{
+                    marginTop: "8px",
+                    fontSize: "14px",
+                    color: "#64748b",
+                    lineHeight: 1.7,
+                  }}
+                >
+                  Tələb olunan məlumatları daxil edin. Müraciət birbaşa sistemə düşəcək.
+                </div>
               </div>
 
               <form onSubmit={handleSubmit} style={{ display: "grid", gap: "14px" }}>
@@ -453,6 +536,7 @@ export default function HomePage() {
                     fontSize: "15px",
                     outline: "none",
                     boxSizing: "border-box",
+                    background: "#fff",
                   }}
                 />
 
@@ -469,82 +553,103 @@ export default function HomePage() {
                     fontSize: "15px",
                     outline: "none",
                     boxSizing: "border-box",
+                    background: "#fff",
                   }}
                 />
 
-                <select
-                  value={form.bank}
-                  onChange={(e) => handleChange("bank", e.target.value)}
+                <div
                   style={{
-                    width: "100%",
-                    padding: "14px 16px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "14px",
-                    fontSize: "15px",
-                    background: "#fff",
-                    outline: "none",
-                    boxSizing: "border-box",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: "14px",
                   }}
                 >
-                  <option value="">Bank seçin (istəyə bağlı)</option>
-                  <option value="Kapital Bank">Kapital Bank</option>
-                  <option value="ABB">ABB</option>
-                  <option value="Unibank">Unibank</option>
-                  <option value="Yelo Bank">Yelo Bank</option>
-                </select>
+                  <select
+                    value={form.bank}
+                    onChange={(e) => handleChange("bank", e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "14px 16px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "14px",
+                      fontSize: "15px",
+                      background: "#fff",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="">Bank seçin</option>
+                    {banks.map((bank) => (
+                      <option key={bank} value={bank}>
+                        {bank}
+                      </option>
+                    ))}
+                  </select>
 
-                <select
-                  value={form.type}
-                  onChange={(e) => handleChange("type", e.target.value)}
+                  <select
+                    value={form.type}
+                    onChange={(e) => handleChange("type", e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "14px 16px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "14px",
+                      fontSize: "15px",
+                      background: "#fff",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="">Kredit növü *</option>
+                    {loanTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div
                   style={{
-                    width: "100%",
-                    padding: "14px 16px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "14px",
-                    fontSize: "15px",
-                    background: "#fff",
-                    outline: "none",
-                    boxSizing: "border-box",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: "14px",
                   }}
                 >
-                  <option value="">Kredit növü seçin *</option>
-                  <option value="Nağd kredit">Nağd kredit</option>
-                  <option value="Biznes krediti">Biznes krediti</option>
-                  <option value="İpoteka">İpoteka</option>
-                  <option value="Kart krediti">Kart krediti</option>
-                </select>
+                  <input
+                    type="number"
+                    placeholder="Kredit məbləği (AZN) *"
+                    value={form.amount}
+                    onChange={(e) => handleChange("amount", e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "14px 16px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "14px",
+                      fontSize: "15px",
+                      outline: "none",
+                      boxSizing: "border-box",
+                      background: "#fff",
+                    }}
+                  />
 
-                <input
-                  type="number"
-                  placeholder="Kredit məbləği (AZN) *"
-                  value={form.amount}
-                  onChange={(e) => handleChange("amount", e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "14px 16px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "14px",
-                    fontSize: "15px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-
-                <input
-                  type="number"
-                  placeholder="Aylıq maaş / gəlir (AZN) *"
-                  value={form.salary}
-                  onChange={(e) => handleChange("salary", e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "14px 16px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "14px",
-                    fontSize: "15px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
+                  <input
+                    type="number"
+                    placeholder="Aylıq maaş / gəlir (AZN) *"
+                    value={form.salary}
+                    onChange={(e) => handleChange("salary", e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "14px 16px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "14px",
+                      fontSize: "15px",
+                      outline: "none",
+                      boxSizing: "border-box",
+                      background: "#fff",
+                    }}
+                  />
+                </div>
 
                 <input
                   type="text"
@@ -559,6 +664,7 @@ export default function HomePage() {
                     fontSize: "15px",
                     outline: "none",
                     boxSizing: "border-box",
+                    background: "#fff",
                   }}
                 />
 
@@ -566,16 +672,21 @@ export default function HomePage() {
                   type="submit"
                   disabled={isSubmitting}
                   style={{
-                    marginTop: "4px",
                     width: "100%",
-                    background: isSubmitting ? "#94a3b8" : "#059669",
-                    color: "#fff",
+                    marginTop: "4px",
+                    padding: "15px 18px",
                     border: "none",
-                    borderRadius: "14px",
-                    padding: "14px 18px",
-                    fontWeight: 700,
+                    borderRadius: "16px",
                     fontSize: "16px",
+                    fontWeight: 800,
                     cursor: isSubmitting ? "not-allowed" : "pointer",
+                    color: "#fff",
+                    background: isSubmitting
+                      ? "#94a3b8"
+                      : "linear-gradient(135deg, #059669, #10b981)",
+                    boxShadow: isSubmitting
+                      ? "none"
+                      : "0 14px 30px rgba(5,150,105,0.24)",
                   }}
                 >
                   {isSubmitting ? "Göndərilir..." : "Müraciəti göndər"}
@@ -584,7 +695,6 @@ export default function HomePage() {
                 {successMessage ? (
                   <div
                     style={{
-                      marginTop: "4px",
                       fontSize: "14px",
                       color: "#166534",
                       background: "#dcfce7",
@@ -597,7 +707,160 @@ export default function HomePage() {
                     {successMessage}
                   </div>
                 ) : null}
+
+                <div
+                  style={{
+                    marginTop: "4px",
+                    padding: "14px",
+                    borderRadius: "14px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    fontSize: "13px",
+                    color: "#64748b",
+                    lineHeight: 1.7,
+                  }}
+                >
+                  Müraciəti göndərməklə məlumatların operator tərəfindən baxılmasına razılıq
+                  vermiş olursunuz.
+                </div>
               </form>
+            </div>
+          </div>
+        </section>
+
+        <section style={{ maxWidth: "1240px", margin: "0 auto", padding: "8px 20px 26px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "16px",
+            }}
+          >
+            {[
+              {
+                title: "Sadə proses",
+                text: "İstifadəçi uzun qeydiyyat olmadan birbaşa müraciət göndərir.",
+              },
+              {
+                title: "Admin nəzarəti",
+                text: "Müraciətlər paneldə görünür, yoxlanılır və statuslandırılır.",
+              },
+              {
+                title: "Bank genişlənməsi",
+                text: "Sonrakı mərhələdə bank kabineti və məhsul təsdiqi aktiv olacaq.",
+              },
+              {
+                title: "Gələcək kalkulyator",
+                text: "Faiz, müddət və məbləğ müqayisəsi ayrıca məhsul blokunda qurulacaq.",
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "22px",
+                  padding: "22px",
+                  boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "18px",
+                    fontWeight: 800,
+                    color: "#0f172a",
+                    marginBottom: "8px",
+                  }}
+                >
+                  {item.title}
+                </div>
+                <div style={{ fontSize: "14px", color: "#475569", lineHeight: 1.75 }}>
+                  {item.text}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section style={{ maxWidth: "1240px", margin: "0 auto", padding: "6px 20px 44px" }}>
+          <div
+            style={{
+              background: "linear-gradient(135deg, #0f172a, #1e293b)",
+              color: "#fff",
+              borderRadius: "28px",
+              padding: "30px",
+              boxShadow: "0 20px 50px rgba(15,23,42,0.18)",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: "20px",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "30px",
+                    fontWeight: 800,
+                    lineHeight: 1.15,
+                  }}
+                >
+                  Admin panel artıq işləyir
+                </div>
+                <div
+                  style={{
+                    marginTop: "12px",
+                    fontSize: "15px",
+                    color: "rgba(255,255,255,0.78)",
+                    lineHeight: 1.8,
+                  }}
+                >
+                  İndi daxil olan müraciətləri idarə etmək, filtrləmək və status dəyişmək
+                  mümkündür. Növbəti mərhələdə bank kabineti və məhsul təsdiq axını əlavə
+                  ediləcək.
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                  justifyContent: "flex-start",
+                }}
+              >
+                <Link
+                  href="/admin/applications"
+                  style={{
+                    textDecoration: "none",
+                    background: "#10b981",
+                    color: "#fff",
+                    padding: "12px 18px",
+                    borderRadius: "14px",
+                    fontWeight: 800,
+                  }}
+                >
+                  Müraciətləri aç
+                </Link>
+
+                <Link
+                  href="/login"
+                  style={{
+                    textDecoration: "none",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    padding: "12px 18px",
+                    borderRadius: "14px",
+                    fontWeight: 800,
+                  }}
+                >
+                  Admin login
+                </Link>
+              </div>
             </div>
           </div>
         </section>
