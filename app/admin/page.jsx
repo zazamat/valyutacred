@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";"use client";
+import { useRouter } from "next/navigation";
+
+"use client";
 
 import Link from "next/link";
 
@@ -56,7 +58,23 @@ const leads = [
 ];
 
 export default function AdminPage() {
-  return (
+  const router = useRouter();
+
+useEffect(() => {
+  const auth = localStorage.getItem("valyutacred_auth");
+
+  if (!auth) {
+    router.push("/login");
+    return;
+  }
+
+  const parsed = JSON.parse(auth);
+
+  if (parsed.role !== "super_admin" && parsed.role !== "admin") {
+    router.push("/login");
+  }
+}, []);
+return (
     <div
       style={{
         minHeight: "100vh",
