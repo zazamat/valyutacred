@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const BANKS = [
   {
@@ -41,7 +41,7 @@ const FEATURED_NEWS = {
     "Unibank yeni ipoteka təklifi ilə mənzil maliyyələşdirilməsi üzrə daha sərfəli şərtlər təqdim etdiyini açıqlayıb. Kampaniya çərçivəsində müştərilər daha aşağı faiz dərəcəsi, uzunmüddətli ödəmə planı və sürətli ilkin baxılma imkanından yararlana bilərlər. Bu təklif xüsusilə mənzil almağı planlaşdıran və aylıq ödənişini daha optimallaşdırılmış formada qurmaq istəyən istifadəçilər üçün nəzərdə tutulub.",
 };
 
-function formatMoney(value) {
+function formatMoney(value: number) {
   return new Intl.NumberFormat("az-AZ", {
     style: "currency",
     currency: "AZN",
@@ -49,7 +49,7 @@ function formatMoney(value) {
   }).format(value || 0);
 }
 
-function calculateMonthlyPayment(principal, annualRate, months) {
+function calculateMonthlyPayment(principal: number, annualRate: number, months: number) {
   if (!principal || !months) return 0;
   const monthlyRate = annualRate / 100 / 12;
   if (monthlyRate === 0) return principal / months;
@@ -65,7 +65,21 @@ export default function Page() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [workplace, setWorkplace] = useState("");
+  const [salary, setSalary] = useState("");
+  const [consent, setConsent] = useState(false);
   const [isNewsOpen, setIsNewsOpen] = useState(false);
+  const [screenWidth, setScreenWidth] = useState(1280);
+
+  useEffect(() => {
+    const updateWidth = () => setScreenWidth(window.innerWidth);
+    updateWidth();
+    window.addEventListener("resize", updateWidth);
+    return () => window.removeEventListener("resize", updateWidth);
+  }, []);
+
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
 
   const selectedBank = useMemo(() => {
     return BANKS.find((bank) => bank.id === bankId) || BANKS[0];
@@ -87,7 +101,7 @@ export default function Page() {
   );
   const totalPayment = payment * numericMonths;
 
-  const handleBankChange = (value) => {
+  const handleBankChange = (value: string) => {
     setBankId(value);
     const nextBank = BANKS.find((bank) => bank.id === value);
     if (nextBank) {
@@ -98,7 +112,7 @@ export default function Page() {
     }
   };
 
-  const handleProductChange = (value) => {
+  const handleProductChange = (value: string) => {
     setProductId(value);
     const nextProduct = selectedBank.products.find(
       (product) => product.id === value
@@ -106,6 +120,13 @@ export default function Page() {
     if (nextProduct) {
       setAmount(String(nextProduct.min));
       setMonths(String(Math.min(nextProduct.months, 24)));
+    }
+  };
+
+  const scrollToId = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -132,11 +153,11 @@ export default function Page() {
           style={{
             maxWidth: "1200px",
             margin: "0 auto",
-            padding: "18px 20px",
+            padding: isMobile ? "14px 16px" : "18px 20px",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            gap: "20px",
+            gap: "16px",
             flexWrap: "wrap",
           }}
         >
@@ -154,6 +175,7 @@ export default function Page() {
                 fontWeight: 700,
                 fontSize: "24px",
                 boxShadow: "0 8px 20px rgba(5,150,105,0.22)",
+                flexShrink: 0,
               }}
             >
               ₼
@@ -171,10 +193,12 @@ export default function Page() {
           <nav
             style={{
               display: "flex",
-              gap: "22px",
+              gap: isMobile ? "14px" : "22px",
               flexWrap: "wrap",
               fontSize: "15px",
               color: "#475569",
+              width: isMobile ? "100%" : "auto",
+              order: isMobile ? 3 : 0,
             }}
           >
             <a href="#calculator" style={{ textDecoration: "none", color: "inherit" }}>
@@ -188,7 +212,14 @@ export default function Page() {
             </a>
           </nav>
 
-          <div style={{ display: "flex", gap: "12px" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+              width: isMobile ? "100%" : "auto",
+              flexWrap: "wrap",
+            }}
+          >
             <button
               style={{
                 background: "#fff",
@@ -198,11 +229,13 @@ export default function Page() {
                 padding: "12px 20px",
                 fontWeight: 700,
                 cursor: "pointer",
+                width: isMobile ? "calc(50% - 6px)" : "auto",
               }}
             >
               Daxil ol
             </button>
             <button
+              onClick={() => scrollToId("application-form")}
               style={{
                 background: "#059669",
                 color: "#fff",
@@ -211,6 +244,7 @@ export default function Page() {
                 padding: "12px 20px",
                 fontWeight: 700,
                 cursor: "pointer",
+                width: isMobile ? "calc(50% - 6px)" : "auto",
               }}
             >
               Müraciət et
@@ -230,10 +264,10 @@ export default function Page() {
             style={{
               maxWidth: "1200px",
               margin: "0 auto",
-              padding: "56px 20px",
+              padding: isMobile ? "32px 16px" : "56px 20px",
               display: "grid",
-              gridTemplateColumns: "1fr 1.08fr",
-              gap: "36px",
+              gridTemplateColumns: isMobile || isTablet ? "1fr" : "1fr 1.08fr",
+              gap: isMobile ? "24px" : "36px",
             }}
           >
             <div style={{ alignSelf: "center" }}>
@@ -255,7 +289,7 @@ export default function Page() {
 
               <h1
                 style={{
-                  fontSize: "54px",
+                  fontSize: isMobile ? "34px" : isTablet ? "42px" : "54px",
                   lineHeight: 1.08,
                   margin: "0 0 18px 0",
                   fontWeight: 800,
@@ -266,7 +300,7 @@ export default function Page() {
 
               <p
                 style={{
-                  fontSize: "18px",
+                  fontSize: isMobile ? "16px" : "18px",
                   lineHeight: 1.7,
                   color: "#475569",
                   margin: 0,
@@ -306,8 +340,16 @@ export default function Page() {
                 ))}
               </div>
 
-              <div style={{ display: "flex", gap: "12px", marginTop: "28px", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  marginTop: "28px",
+                  flexWrap: "wrap",
+                }}
+              >
                 <button
+                  onClick={() => scrollToId("calculator")}
                   style={{
                     background: "#059669",
                     color: "#fff",
@@ -316,11 +358,13 @@ export default function Page() {
                     padding: "14px 22px",
                     fontWeight: 700,
                     cursor: "pointer",
+                    width: isMobile ? "100%" : "auto",
                   }}
                 >
                   Kalkulyatora başla
                 </button>
                 <button
+                  onClick={() => scrollToId("how-it-works")}
                   style={{
                     background: "#fff",
                     color: "#0f172a",
@@ -329,9 +373,25 @@ export default function Page() {
                     padding: "14px 22px",
                     fontWeight: 700,
                     cursor: "pointer",
+                    width: isMobile ? "100%" : "auto",
                   }}
                 >
                   Necə işləyir
+                </button>
+                <button
+                  onClick={() => scrollToId("application-form")}
+                  style={{
+                    background: "#0f172a",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "14px",
+                    padding: "14px 22px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    width: isMobile ? "100%" : "auto",
+                  }}
+                >
+                  Müraciət et
                 </button>
               </div>
             </div>
@@ -343,10 +403,16 @@ export default function Page() {
                 border: "1px solid #e2e8f0",
                 borderRadius: "24px",
                 boxShadow: "0 14px 32px rgba(15,23,42,0.08)",
-                padding: "28px",
+                padding: isMobile ? "18px" : "28px",
               }}
             >
-              <h2 style={{ marginTop: 0, marginBottom: "8px", fontSize: "30px" }}>
+              <h2
+                style={{
+                  marginTop: 0,
+                  marginBottom: "8px",
+                  fontSize: isMobile ? "24px" : "30px",
+                }}
+              >
                 Kredit kalkulyatoru
               </h2>
               <p
@@ -363,7 +429,7 @@ export default function Page() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
                   gap: "16px",
                 }}
               >
@@ -379,6 +445,7 @@ export default function Page() {
                       borderRadius: "14px",
                       fontSize: "16px",
                       boxSizing: "border-box",
+                      background: "#fff",
                     }}
                     value={bankId}
                     onChange={(e) => handleBankChange(e.target.value)}
@@ -403,6 +470,7 @@ export default function Page() {
                       borderRadius: "14px",
                       fontSize: "16px",
                       boxSizing: "border-box",
+                      background: "#fff",
                     }}
                     value={productId}
                     onChange={(e) => handleProductChange(e.target.value)}
@@ -419,7 +487,7 @@ export default function Page() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
                   gap: "16px",
                   marginTop: "16px",
                 }}
@@ -476,7 +544,7 @@ export default function Page() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr",
                   gap: "16px",
                   background: "#f8fafc",
                   borderRadius: "18px",
@@ -506,107 +574,256 @@ export default function Page() {
 
               <div
                 style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "16px",
-                  padding: "16px",
                   marginTop: "18px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "20px",
+                  padding: isMobile ? "14px" : "16px",
+                  background: "#fff",
                 }}
               >
-                <div style={{ fontWeight: 700, marginBottom: "12px" }}>
+                <div style={{ fontWeight: 700, marginBottom: "14px", fontSize: "18px" }}>
                   Kimdən təklif almaq istəyirsiniz?
                 </div>
 
-                <label style={{ display: "block", marginBottom: "12px", color: "#334155" }}>
-                  <input
-                    type="radio"
-                    name="leadType"
-                    value="exclusive"
-                    checked={leadType === "exclusive"}
-                    onChange={(e) => setLeadType(e.target.value)}
-                  />{" "}
-                  Yalnız seçdiyim bankdan
-                </label>
+                <div style={{ display: "grid", gap: "12px" }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "12px",
+                      border: leadType === "exclusive" ? "1px solid #059669" : "1px solid #e2e8f0",
+                      background: leadType === "exclusive" ? "#ecfdf5" : "#fff",
+                      borderRadius: "16px",
+                      padding: "14px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="leadType"
+                      value="exclusive"
+                      checked={leadType === "exclusive"}
+                      onChange={(e) => setLeadType(e.target.value)}
+                      style={{ marginTop: "3px" }}
+                    />
+                    <div>
+                      <div style={{ color: "#0f172a", fontWeight: 700 }}>
+                        Yalnız seçdiyim bankdan
+                      </div>
+                    </div>
+                  </label>
 
-                <label style={{ display: "block", color: "#334155" }}>
-                  <input
-                    type="radio"
-                    name="leadType"
-                    value="shared"
-                    checked={leadType === "shared"}
-                    onChange={(e) => setLeadType(e.target.value)}
-                  />{" "}
-                  Digər banklardan da təklif almaq istəyirəm
-                </label>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "12px",
+                      border: leadType === "shared" ? "1px solid #059669" : "1px solid #e2e8f0",
+                      background: leadType === "shared" ? "#ecfdf5" : "#fff",
+                      borderRadius: "16px",
+                      padding: "14px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="leadType"
+                      value="shared"
+                      checked={leadType === "shared"}
+                      onChange={(e) => setLeadType(e.target.value)}
+                      style={{ marginTop: "3px" }}
+                    />
+                    <div>
+                      <div style={{ color: "#0f172a", fontWeight: 700 }}>
+                        Digər banklardan da təklif almaq istəyirəm
+                      </div>
+                    </div>
+                  </label>
+                </div>
 
-                <div style={{ marginTop: "10px", fontSize: "13px", color: "#64748b" }}>
+                <div style={{ marginTop: "10px", fontSize: "13px", color: "#64748b", lineHeight: 1.6 }}>
                   Məlumatlarınız seçiminizə uyğun olaraq banklara təqdim oluna bilər.
                 </div>
               </div>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "16px",
-                  marginTop: "16px",
-                }}
-              >
-                <div>
-                  <label style={{ display: "block", fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
-                    Ad və soyad
-                  </label>
-                  <input
-                    style={{
-                      width: "100%",
-                      padding: "14px 16px",
-                      border: "1px solid #cbd5e1",
-                      borderRadius: "14px",
-                      fontSize: "16px",
-                      boxSizing: "border-box",
-                    }}
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Məs: Əhməd Əhmədov"
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: "block", fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
-                    Telefon
-                  </label>
-                  <input
-                    style={{
-                      width: "100%",
-                      padding: "14px 16px",
-                      border: "1px solid #cbd5e1",
-                      borderRadius: "14px",
-                      fontSize: "16px",
-                      boxSizing: "border-box",
-                    }}
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+994 50 000 00 00"
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginTop: "16px" }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
-                  Email
-                </label>
-                <input
+              <div id="application-form" style={{ marginTop: "18px" }}>
+                <div
                   style={{
-                    width: "100%",
-                    padding: "14px 16px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "14px",
-                    fontSize: "16px",
-                    boxSizing: "border-box",
+                    fontWeight: 800,
+                    fontSize: "22px",
+                    marginBottom: "14px",
                   }}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="mail@example.com"
-                />
+                >
+                  Müraciət forması
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                    gap: "16px",
+                  }}
+                >
+                  <div>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
+                      Ad və soyad
+                    </label>
+                    <input
+                      style={{
+                        width: "100%",
+                        padding: "14px 16px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "14px",
+                        fontSize: "16px",
+                        boxSizing: "border-box",
+                      }}
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Məs: Əhməd Əhmədov"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
+                      Telefon
+                    </label>
+                    <input
+                      style={{
+                        width: "100%",
+                        padding: "14px 16px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "14px",
+                        fontSize: "16px",
+                        boxSizing: "border-box",
+                      }}
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+994 50 000 00 00"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                    gap: "16px",
+                    marginTop: "16px",
+                  }}
+                >
+                  <div>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
+                      Email
+                    </label>
+                    <input
+                      style={{
+                        width: "100%",
+                        padding: "14px 16px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "14px",
+                        fontSize: "16px",
+                        boxSizing: "border-box",
+                      }}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="mail@example.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
+                      İş yeri
+                    </label>
+                    <input
+                      style={{
+                        width: "100%",
+                        padding: "14px 16px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "14px",
+                        fontSize: "16px",
+                        boxSizing: "border-box",
+                      }}
+                      value={workplace}
+                      onChange={(e) => setWorkplace(e.target.value)}
+                      placeholder="Məs: ABC MMC"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                    gap: "16px",
+                    marginTop: "16px",
+                  }}
+                >
+                  <div>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, marginBottom: "8px" }}>
+                      Aylıq maaş (AZN)
+                    </label>
+                    <input
+                      style={{
+                        width: "100%",
+                        padding: "14px 16px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "14px",
+                        fontSize: "16px",
+                        boxSizing: "border-box",
+                      }}
+                      type="number"
+                      value={salary}
+                      onChange={(e) => setSalary(e.target.value)}
+                      placeholder="Məs: 1200"
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-end",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "100%",
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "14px",
+                        padding: "14px 16px",
+                        color: "#475569",
+                        fontSize: "14px",
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      Müraciət bankın daxili qiymətləndirməsinə uyğun olaraq yoxlanılacaq.
+                    </div>
+                  </div>
+                </div>
+
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                    marginTop: "16px",
+                    fontSize: "14px",
+                    color: "#475569",
+                    lineHeight: 1.6,
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    style={{ marginTop: "3px" }}
+                  />
+                  <span>
+                    Şəxsi məlumatlarımın banklara təqdim edilməsinə və platformanın
+                    məxfilik siyasətinə uyğun işlənməsinə razıyam.
+                  </span>
+                </label>
               </div>
 
               <div
@@ -624,6 +841,7 @@ export default function Page() {
               </div>
 
               <button
+                onClick={() => scrollToId("application-form")}
                 style={{
                   background: "#059669",
                   color: "#fff",
@@ -652,20 +870,24 @@ export default function Page() {
             style={{
               maxWidth: "1200px",
               margin: "0 auto",
-              padding: "24px 20px",
+              padding: isMobile ? "20px 16px" : "24px 20px",
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
+                gridTemplateColumns: isMobile
+                  ? "1fr"
+                  : isTablet
+                  ? "1fr 1fr"
+                  : "repeat(4, 1fr)",
                 gap: "16px",
               }}
             >
               {[
-                { value: "N", label: "kredit məhsulu" },
-                { value: "N", label: "təşkilat" },
-                { value: "N", label: "müraciət" },
+                { value: "35+", label: "kredit məhsulu" },
+                { value: "12+", label: "təşkilat" },
+                { value: "2 500+", label: "müraciət" },
                 { value: "24/7", label: "müraciət imkanı" },
               ].map((item) => (
                 <div
@@ -691,12 +913,12 @@ export default function Page() {
         <section
           id="featured-news"
           style={{
-            padding: "48px 0",
+            padding: isMobile ? "36px 0" : "48px 0",
             background: "#f8fafc",
             borderBottom: "1px solid #e2e8f0",
           }}
         >
-          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 20px" }}>
+          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: isMobile ? "0 16px" : "0 20px" }}>
             <div style={{ marginBottom: "20px" }}>
               <div
                 style={{
@@ -713,7 +935,7 @@ export default function Page() {
               >
                 Günün xəbəri
               </div>
-              <h2 style={{ fontSize: "38px", margin: 0, fontWeight: 800 }}>
+              <h2 style={{ fontSize: isMobile ? "28px" : "38px", margin: 0, fontWeight: 800 }}>
                 Bank məhsulu üzrə seçilmiş sponsorlu xəbər
               </h2>
             </div>
@@ -726,10 +948,10 @@ export default function Page() {
                 overflow: "hidden",
                 boxShadow: "0 8px 24px rgba(15,23,42,0.06)",
                 display: "grid",
-                gridTemplateColumns: "0.95fr 1.05fr",
+                gridTemplateColumns: isMobile || isTablet ? "1fr" : "0.95fr 1.05fr",
               }}
             >
-              <div style={{ padding: "32px" }}>
+              <div style={{ padding: isMobile ? "20px" : "32px", order: isMobile ? 2 : 1 }}>
                 <div
                   style={{
                     display: "inline-block",
@@ -745,7 +967,7 @@ export default function Page() {
                   {FEATURED_NEWS.bank}
                 </div>
 
-                <h3 style={{ fontSize: "28px", lineHeight: 1.2, marginTop: 0, fontWeight: 800 }}>
+                <h3 style={{ fontSize: isMobile ? "24px" : "28px", lineHeight: 1.2, marginTop: 0, fontWeight: 800 }}>
                   {FEATURED_NEWS.title}
                 </h3>
 
@@ -753,31 +975,49 @@ export default function Page() {
                   {FEATURED_NEWS.excerpt}
                 </p>
 
-                <button
-                  style={{
-                    background: "#0f172a",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "14px",
-                    padding: "14px 22px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    marginTop: "10px",
-                  }}
-                  onClick={() => setIsNewsOpen(true)}
-                >
-                  Davamını oxu
-                </button>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                  <button
+                    style={{
+                      background: "#0f172a",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "14px",
+                      padding: "14px 22px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      marginTop: "10px",
+                    }}
+                    onClick={() => setIsNewsOpen(true)}
+                  >
+                    Davamını oxu
+                  </button>
+
+                  <button
+                    onClick={() => scrollToId("how-it-works")}
+                    style={{
+                      background: "#fff",
+                      color: "#0f172a",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "14px",
+                      padding: "14px 22px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      marginTop: "10px",
+                    }}
+                  >
+                    Necə işləyir
+                  </button>
+                </div>
               </div>
 
-              <div>
+              <div style={{ order: isMobile ? 1 : 2 }}>
                 <img
                   src={FEATURED_NEWS.image}
                   alt={FEATURED_NEWS.title}
                   style={{
                     width: "100%",
                     height: "100%",
-                    minHeight: "320px",
+                    minHeight: isMobile ? "220px" : "320px",
                     objectFit: "cover",
                     display: "block",
                   }}
@@ -787,8 +1027,8 @@ export default function Page() {
           </div>
         </section>
 
-        <section id="how-it-works" style={{ padding: "56px 0" }}>
-          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 20px" }}>
+        <section id="how-it-works" style={{ padding: isMobile ? "40px 0" : "56px 0" }}>
+          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: isMobile ? "0 16px" : "0 20px" }}>
             <div style={{ maxWidth: "700px", marginBottom: "28px" }}>
               <div
                 style={{
@@ -805,10 +1045,10 @@ export default function Page() {
               >
                 Necə işləyir
               </div>
-              <h2 style={{ fontSize: "44px", margin: 0, fontWeight: 800 }}>
+              <h2 style={{ fontSize: isMobile ? "30px" : "44px", margin: 0, fontWeight: 800 }}>
                 3 addımda müraciət prosesi
               </h2>
-              <p style={{ fontSize: "18px", lineHeight: 1.7, color: "#475569", marginTop: "12px" }}>
+              <p style={{ fontSize: isMobile ? "16px" : "18px", lineHeight: 1.7, color: "#475569", marginTop: "12px" }}>
                 İstifadəçidən banka qədər bütün axın sadə, aydın və idarə olunan şəkildə qurulur.
               </p>
             </div>
@@ -816,7 +1056,7 @@ export default function Page() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
+                gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr",
                 gap: "20px",
               }}
             >
@@ -840,14 +1080,14 @@ export default function Page() {
                     background: "#fff",
                     border: "1px solid #e2e8f0",
                     borderRadius: "24px",
-                    padding: "28px",
+                    padding: isMobile ? "22px" : "28px",
                     boxShadow: "0 8px 24px rgba(15,23,42,0.06)",
                   }}
                 >
                   <div style={{ color: "#059669", fontWeight: 800, marginBottom: "10px" }}>
                     Addım {index + 1}
                   </div>
-                  <h3 style={{ marginTop: 0, fontSize: "24px", fontWeight: 800 }}>
+                  <h3 style={{ marginTop: 0, fontSize: isMobile ? "21px" : "24px", fontWeight: 800 }}>
                     {item.title}
                   </h3>
                   <p style={{ fontSize: "16px", lineHeight: 1.8, color: "#475569" }}>
@@ -855,6 +1095,40 @@ export default function Page() {
                   </p>
                 </div>
               ))}
+            </div>
+
+            <div style={{ marginTop: "24px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              <button
+                onClick={() => scrollToId("application-form")}
+                style={{
+                  background: "#059669",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "14px",
+                  padding: "14px 22px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  width: isMobile ? "100%" : "auto",
+                }}
+              >
+                Müraciət et
+              </button>
+
+              <button
+                onClick={() => scrollToId("calculator")}
+                style={{
+                  background: "#fff",
+                  color: "#0f172a",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "14px",
+                  padding: "14px 22px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  width: isMobile ? "100%" : "auto",
+                }}
+              >
+                Kalkulyatora qayıt
+              </button>
             </div>
           </div>
         </section>
@@ -871,10 +1145,10 @@ export default function Page() {
           style={{
             maxWidth: "1200px",
             margin: "0 auto",
-            padding: "42px 20px",
+            padding: isMobile ? "32px 16px" : "42px 20px",
             display: "grid",
-            gridTemplateColumns: "1.2fr 1fr 1fr 1fr",
-            gap: "30px",
+            gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1.2fr 1fr 1fr 1fr",
+            gap: "24px",
           }}
         >
           <div>
@@ -890,37 +1164,29 @@ export default function Page() {
           <div>
             <div style={{ fontWeight: 800, marginBottom: "12px" }}>Platforma</div>
             <div style={{ marginBottom: "8px" }}>
-              <a href="#calculator">Kalkulyator</a>
+              <a href="#calculator" style={{ color: "#475569", textDecoration: "none" }}>Kalkulyator</a>
             </div>
             <div style={{ marginBottom: "8px" }}>
-              <a href="#featured-news">Günün xəbəri</a>
+              <a href="#featured-news" style={{ color: "#475569", textDecoration: "none" }}>Günün xəbəri</a>
             </div>
             <div>
-              <a href="#how-it-works">Necə işləyir</a>
+              <a href="#how-it-works" style={{ color: "#475569", textDecoration: "none" }}>Necə işləyir</a>
             </div>
           </div>
 
           <div>
             <div style={{ fontWeight: 800, marginBottom: "12px" }}>Hüquqi</div>
-            <div style={{ marginBottom: "8px" }}>
-              <a href="#">Məxfilik siyasəti</a>
-            </div>
-            <div style={{ marginBottom: "8px" }}>
-              <a href="#">İstifadəçi razılaşması</a>
-            </div>
-            <div style={{ marginBottom: "8px" }}>
-              <a href="#">Cookie siyasəti</a>
-            </div>
-            <div>
-              <a href="#">FAQ</a>
-            </div>
+            <div style={{ marginBottom: "8px", color: "#475569" }}>Məxfilik siyasəti</div>
+            <div style={{ marginBottom: "8px", color: "#475569" }}>İstifadəçi razılaşması</div>
+            <div style={{ marginBottom: "8px", color: "#475569" }}>Cookie siyasəti</div>
+            <div style={{ color: "#475569" }}>FAQ</div>
           </div>
 
           <div>
             <div style={{ fontWeight: 800, marginBottom: "12px" }}>Əlaqə</div>
-            <div style={{ marginBottom: "8px" }}>Bakı, Azərbaycan</div>
-            <div style={{ marginBottom: "8px" }}>info@valyutacred.az</div>
-            <div>+994 12 000 00 00</div>
+            <div style={{ marginBottom: "8px", color: "#475569" }}>Bakı, Azərbaycan</div>
+            <div style={{ marginBottom: "8px", color: "#475569" }}>info@valyutacred.az</div>
+            <div style={{ color: "#475569" }}>+994 12 000 00 00</div>
           </div>
         </div>
 
@@ -967,8 +1233,9 @@ export default function Page() {
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
-                padding: "20px 24px",
+                alignItems: "flex-start",
+                gap: "12px",
+                padding: isMobile ? "16px" : "20px 24px",
                 borderBottom: "1px solid #e2e8f0",
               }}
             >
@@ -976,7 +1243,7 @@ export default function Page() {
                 <div style={{ fontSize: "12px", color: "#047857", fontWeight: 800 }}>
                   {FEATURED_NEWS.bank}
                 </div>
-                <div style={{ fontSize: "28px", fontWeight: 800, marginTop: "6px" }}>
+                <div style={{ fontSize: isMobile ? "22px" : "28px", fontWeight: 800, marginTop: "6px" }}>
                   {FEATURED_NEWS.title}
                 </div>
               </div>
@@ -991,16 +1258,17 @@ export default function Page() {
                   height: "40px",
                   cursor: "pointer",
                   fontSize: "20px",
+                  flexShrink: 0,
                 }}
               >
                 ×
               </button>
             </div>
 
-            <div style={{ padding: "24px" }}>
+            <div style={{ padding: isMobile ? "16px" : "24px" }}>
               <div
                 style={{
-                  padding: "24px",
+                  padding: isMobile ? "18px" : "24px",
                   borderRadius: "20px",
                   background: "linear-gradient(to right, #ecfdf5, #f0f9ff)",
                 }}
@@ -1019,12 +1287,12 @@ export default function Page() {
                 >
                   Sponsorlu kontent
                 </div>
-                <p style={{ fontSize: "17px", lineHeight: 1.8, color: "#475569", margin: 0 }}>
+                <p style={{ fontSize: isMobile ? "15px" : "17px", lineHeight: 1.8, color: "#475569", margin: 0 }}>
                   {FEATURED_NEWS.content}
                 </p>
               </div>
 
-              <div style={{ marginTop: "20px" }}>
+              <div style={{ marginTop: "20px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
                 <a
                   href={FEATURED_NEWS.sourceUrl}
                   target="_blank"
@@ -1042,6 +1310,24 @@ export default function Page() {
                 >
                   Orijinal xəbəri oxu →
                 </a>
+
+                <button
+                  onClick={() => {
+                    setIsNewsOpen(false);
+                    setTimeout(() => scrollToId("application-form"), 100);
+                  }}
+                  style={{
+                    background: "#059669",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "14px",
+                    padding: "12px 20px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Müraciət et
+                </button>
               </div>
             </div>
           </div>
