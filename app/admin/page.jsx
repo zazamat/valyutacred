@@ -11,7 +11,7 @@ const cards = [
     desc: "Daxil olan kredit müraciətləri",
   },
   {
-    title: "Aktiv banklar",
+    title: "Aktiv təşkilatlar",
     value: "12",
     desc: "Sistemə qoşulmuş tərəfdaşlar",
   },
@@ -31,24 +31,27 @@ const leads = [
   {
     name: "Elvin Məmmədov",
     phone: "+994 50 111 22 33",
-    bank: "Kapital Bank",
-    type: "Nağd kredit",
+    organizationType: "Bank",
+    organization: "Kapital Bank",
+    product: "Nağd kredit",
     amount: "12 000 AZN",
     status: "Yeni",
   },
   {
     name: "Aysel Həsənova",
     phone: "+994 55 444 55 66",
-    bank: "ABB",
-    type: "Biznes krediti",
+    organizationType: "BOKT",
+    organization: "Finoko",
+    product: "Biznes krediti",
     amount: "20 000 AZN",
     status: "Baxılır",
   },
   {
     name: "Murad Əliyev",
     phone: "+994 70 777 88 99",
-    bank: "Unibank",
-    type: "İpoteka",
+    organizationType: "Bank",
+    organization: "Unibank",
+    product: "İpoteka",
     amount: "85 000 AZN",
     status: "Göndərildi",
   },
@@ -190,7 +193,8 @@ export default function AdminPage() {
               Sayta qayıt
             </Link>
 
-            <button
+            <Link
+              href="/admin/organizations"
               style={{
                 background: "#059669",
                 color: "#fff",
@@ -198,13 +202,13 @@ export default function AdminPage() {
                 borderRadius: "12px",
                 padding: "10px 16px",
                 fontWeight: 700,
-                cursor: "pointer",
                 textAlign: "center",
+                textDecoration: "none",
                 flex: isMobile ? "1 1 180px" : "0 0 auto",
               }}
             >
-              Yeni bank əlavə et
-            </button>
+              Yeni təşkilat əlavə et
+            </Link>
           </div>
         </div>
       </header>
@@ -245,7 +249,7 @@ export default function AdminPage() {
                 marginTop: "10px",
               }}
             >
-              Buradan müraciətləri, bankları, statusları və ümumi axını idarə etmək mümkün olacaq.
+              Buradan müraciətləri, təşkilatları, məhsulları, statusları və ümumi axını idarə etmək mümkündür.
             </p>
           </div>
 
@@ -351,14 +355,15 @@ export default function AdminPage() {
                   style={{
                     width: "100%",
                     borderCollapse: "collapse",
-                    minWidth: "760px",
+                    minWidth: "900px",
                   }}
                 >
                   <thead>
                     <tr style={{ background: "#f8fafc", textAlign: "left" }}>
                       <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Ad</th>
                       <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Telefon</th>
-                      <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Bank</th>
+                      <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Növ</th>
+                      <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Təşkilat</th>
                       <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Məhsul</th>
                       <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Məbləğ</th>
                       <th style={{ padding: "14px 16px", borderBottom: "1px solid #e2e8f0", fontSize: "14px" }}>Status</th>
@@ -369,8 +374,9 @@ export default function AdminPage() {
                       <tr key={lead.name}>
                         <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>{lead.name}</td>
                         <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>{lead.phone}</td>
-                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>{lead.bank}</td>
-                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>{lead.type}</td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>{lead.organizationType}</td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>{lead.organization}</td>
+                        <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>{lead.product}</td>
                         <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>{lead.amount}</td>
                         <td style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
                           <span
@@ -441,20 +447,22 @@ export default function AdminPage() {
                     + Yeni müraciət əlavə et
                   </button>
 
-                  <button
+                  <Link
+                    href="/admin/organizations"
                     style={{
+                      display: "block",
                       background: "#fff",
                       color: "#0f172a",
                       border: "1px solid #cbd5e1",
                       borderRadius: "14px",
                       padding: "12px 14px",
                       fontWeight: 700,
-                      cursor: "pointer",
                       textAlign: "left",
+                      textDecoration: "none",
                     }}
                   >
-                    Bank siyahısını idarə et
-                  </button>
+                    Təşkilatları idarə et
+                  </Link>
 
                   <Link
                     href="/admin/applications"
@@ -488,7 +496,7 @@ export default function AdminPage() {
                   Növbəti addım
                 </div>
                 <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                  Sonrakı mərhələdə bu panelə real login, rol əsaslı giriş, lead status dəyişimi və bank kabineti əlavə ediləcək.
+                  Sonrakı mərhələdə bu panelə real login, rol əsaslı giriş, təşkilat kabineti, məhsul idarəsi və lead status dəyişimi əlavə ediləcək.
                 </p>
               </div>
             </div>
