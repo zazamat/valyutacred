@@ -41,7 +41,7 @@ const FEATURED_NEWS = {
     "Unibank yeni ipoteka təklifi ilə mənzil maliyyələşdirilməsi üzrə daha sərfəli şərtlər təqdim etdiyini açıqlayıb. Kampaniya çərçivəsində müştərilər daha aşağı faiz dərəcəsi, uzunmüddətli ödəmə planı və sürətli ilkin baxılma imkanından yararlana bilərlər. Bu təklif xüsusilə mənzil almağı planlaşdıran və aylıq ödənişini daha optimallaşdırılmış formada qurmaq istəyən istifadəçilər üçün nəzərdə tutulub.",
 };
 
-function formatMoney(value: number) {
+function formatMoney(value) {
   return new Intl.NumberFormat("az-AZ", {
     style: "currency",
     currency: "AZN",
@@ -49,7 +49,7 @@ function formatMoney(value: number) {
   }).format(value || 0);
 }
 
-function calculateMonthlyPayment(principal: number, annualRate: number, months: number) {
+function calculateMonthlyPayment(principal, annualRate, months) {
   if (!principal || !months) return 0;
   const monthlyRate = annualRate / 100 / 12;
   if (monthlyRate === 0) return principal / months;
@@ -101,7 +101,7 @@ export default function Page() {
   );
   const totalPayment = payment * numericMonths;
 
-  const handleBankChange = (value: string) => {
+  const handleBankChange = (value) => {
     setBankId(value);
     const nextBank = BANKS.find((bank) => bank.id === value);
     if (nextBank) {
@@ -112,7 +112,7 @@ export default function Page() {
     }
   };
 
-  const handleProductChange = (value: string) => {
+  const handleProductChange = (value) => {
     setProductId(value);
     const nextProduct = selectedBank.products.find(
       (product) => product.id === value
@@ -123,7 +123,7 @@ export default function Page() {
     }
   };
 
-  const scrollToId = (id: string) => {
+  const scrollToId = (id) => {
     const el = document.getElementById(id);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
