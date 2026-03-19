@@ -389,20 +389,23 @@ export default function AdminPage() {
                     Bank siyahısını idarə et
                   </button>
 
-                  <button
-                    style={{
-                      background: "#fff",
-                      color: "#0f172a",
-                      border: "1px solid #cbd5e1",
-                      borderRadius: "14px",
-                      padding: "12px 14px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    Statusları yenilə
-                  </button>
+                  <Link
+  href="/admin/applications"
+  style={{
+    display: "block",
+    background: "#fff",
+    color: "#0f172a",
+    border: "1px solid #cbd5e1",
+    borderRadius: "14px",
+    padding: "12px 14px",
+    fontWeight: 700,
+    cursor: "pointer",
+    textAlign: "left",
+    textDecoration: "none",
+  }}
+>
+  Statusları yenilə
+</Link>
                 </div>
               </div>
 
