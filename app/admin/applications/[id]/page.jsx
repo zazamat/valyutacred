@@ -2,7 +2,6 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
 
@@ -133,7 +132,6 @@ export default function ApplicationDetailPage() {
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pageMessage, setPageMessage] = useState("");
-  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const derivedData = useMemo(() => {
     if (!application) return null;
@@ -186,8 +184,8 @@ export default function ApplicationDetailPage() {
 
         if (organizationsRes.error) {
           setApplication(applicationRes.data || null);
-          setPageMessage("Təşkilatlar yüklənmədi: " + organizationsRes.error.message);
           setOrganizations([]);
+          setPageMessage("Təşkilatlar yüklənmədi: " + organizationsRes.error.message);
           setLoading(false);
           return;
         }
@@ -196,6 +194,8 @@ export default function ApplicationDetailPage() {
         setOrganizations(organizationsRes.data || []);
         setLoading(false);
       } catch (error) {
+        setApplication(null);
+        setOrganizations([]);
         setPageMessage("Səhifə yüklənmədi.");
         setLoading(false);
       }
@@ -205,59 +205,6 @@ export default function ApplicationDetailPage() {
       fetchData();
     }
   }, [id, router]);
-
-  async function updateStatus(applicationId, currentStatus) {
-    const normalizedCurrent =
-      currentStatus === "processing"
-        ? "reviewing"
-        : currentStatus === "sent"
-        ? "approved"
-        : currentStatus;
-
-    const currentIndex = STATUS_OPTIONS.findIndex(
-      (item) => item.value === normalizedCurrent
-    );
-
-    const nextStatus =
-      currentIndex === -1
-        ? "new"
-        : STATUS_OPTIONS[(currentIndex + 1) % STATUS_OPTIONS.length].value;
-
-    setUpdatingStatus(true);
-    setPageMessage("");
-
-    const { error: updateError } = await supabase
-      .from("applications")
-      .update({ status: nextStatus })
-      .eq("id", applicationId);
-
-    if (updateError) {
-      setUpdatingStatus(false);
-      setPageMessage("Status yenilənmədi: " + updateError.message);
-      return;
-    }
-
-    const { data: freshApplication, error: refetchError } = await supabase
-      .from("applications")
-      .select("*")
-      .eq("id", applicationId)
-      .single();
-
-    setUpdatingStatus(false);
-
-    if (refetchError) {
-      setPageMessage("Status dəyişdi, amma məlumat yenidən oxunmadı: " + refetchError.message);
-      return;
-    }
-
-    if (!freshApplication) {
-      setPageMessage("Status dəyişdi, amma müraciət məlumatı tapılmadı.");
-      return;
-    }
-
-    setApplication(freshApplication);
-    setPageMessage("Status yeniləndi.");
-  }
 
   if (loading) {
     return <div style={styles.loadingBox}>Yüklənir...</div>;
@@ -307,7 +254,7 @@ export default function ApplicationDetailPage() {
           <button
             type="button"
             style={styles.backLink}
-            onClick={() => router.push(`/admin/applications?updated=${Date.now()}`)}
+            onClick={() => router.push("/admin/applications")}
           >
             ← Müraciətlərə qayıt
           </button>
@@ -378,20 +325,19 @@ export default function ApplicationDetailPage() {
           <div style={styles.panelHeader}>
             <h2 style={styles.panelTitle}>Kredit məlumatları</h2>
             <p style={styles.panelDesc}>
-              Hazırkı form məlumatı və gələcək məhsul axını üçün baza.
+              Mövcud müraciətin maliyyə və məhsul detalları.
             </p>
           </div>
 
           <div style={styles.infoGrid}>
             <div style={styles.infoItem}>
-              <div style={styles.infoLabel}>Bank / təşkilat</div>
-              <div style={styles.infoValue}>
-                {application.distribution_type === "only_selected"
-                  ? organizationMap[application.selected_organization_id] ||
-                    derivedData?.bank ||
-                    "-"
-                  : derivedData?.bank || "-"}
-              </div>
+              <div style={styles.infoLabel}>Məbləğ</div>
+              <div style={styles.infoValue}>{formatMoney(application.amount)}</div>
+            </div>
+
+            <div style={styles.infoItem}>
+              <div style={styles.infoLabel}>Bank</div>
+              <div style={styles.infoValue}>{derivedData?.bank || "-"}</div>
             </div>
 
             <div style={styles.infoItem}>
@@ -400,15 +346,21 @@ export default function ApplicationDetailPage() {
             </div>
 
             <div style={styles.infoItem}>
-              <div style={styles.infoLabel}>Məbləğ</div>
-              <div style={styles.infoValue}>{formatMoney(application.amount)}</div>
-            </div>
-
-            <div style={styles.infoItem}>
               <div style={styles.infoLabel}>Müraciət tarixi</div>
               <div style={styles.infoValue}>{formatDateTime(application.created_at)}</div>
             </div>
+          </div>
+        </section>
 
+        <section style={styles.panel}>
+          <div style={styles.panelHeader}>
+            <h2 style={styles.panelTitle}>Paylaşım məlumatları</h2>
+            <p style={styles.panelDesc}>
+              Müraciətin hansı qayda ilə paylaşıldığını göstərir.
+            </p>
+          </div>
+
+          <div style={styles.infoGrid}>
             <div style={styles.infoItem}>
               <div style={styles.infoLabel}>Paylaşım tipi</div>
               <div style={styles.infoValue}>
@@ -426,26 +378,6 @@ export default function ApplicationDetailPage() {
                   : "-"}
               </div>
             </div>
-          </div>
-        </section>
-
-        <section style={styles.panel}>
-          <div style={styles.panelHeader}>
-            <h2 style={styles.panelTitle}>Proses idarəsi</h2>
-            <p style={styles.panelDesc}>
-              Admin baxışı üçün status nəzarəti.
-            </p>
-          </div>
-
-          <div style={styles.formBlock}>
-            <button
-              type="button"
-              style={styles.primaryButton}
-              onClick={() => updateStatus(application.id, application.status)}
-              disabled={updatingStatus}
-            >
-              {updatingStatus ? "Yenilənir..." : "Status dəyiş"}
-            </button>
           </div>
         </section>
 
@@ -485,16 +417,9 @@ export default function ApplicationDetailPage() {
           </div>
 
           <div style={styles.futureCard}>
-            <div style={styles.futureTitle}>User kabineti görünüşü</div>
+            <div style={styles.futureTitle}>Sənəd və əlavə fayllar</div>
             <div style={styles.futureText}>
-              Adminə aid olmayan hissələr sonradan user üçün ayrıca açılacaq.
-            </div>
-          </div>
-
-          <div style={styles.futureCard}>
-            <div style={styles.futureTitle}>Bank / operator əməliyyatları</div>
-            <div style={styles.futureText}>
-              Banka yönləndirmə, cavablar, daxili qeydlər və sənəd axını ayrıca əlavə olunacaq.
+              User sənədləri, müqavilə, fayl əlavələri və digər upload-lar burada yer alacaq.
             </div>
           </div>
         </div>
@@ -515,31 +440,13 @@ const styles = {
     alignItems: "flex-start",
     gap: "16px",
     flexWrap: "wrap",
-    marginBottom: "20px",
+    marginBottom: "24px",
   },
+  header: {},
   topActions: {
     display: "flex",
-    gap: "10px",
+    gap: "12px",
     flexWrap: "wrap",
-  },
-  backLink: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textDecoration: "none",
-    background: "#ffffff",
-    color: "#0f172a",
-    border: "1px solid #cbd5e1",
-    borderRadius: "14px",
-    padding: "10px 14px",
-    fontSize: "14px",
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
-    fontFamily: "inherit",
-  },
-  header: {
-    marginBottom: "4px",
   },
   title: {
     margin: 0,
@@ -557,6 +464,20 @@ const styles = {
     lineHeight: 1.7,
     maxWidth: "920px",
   },
+  backLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#ffffff",
+    color: "#0f172a",
+    border: "1px solid #cbd5e1",
+    borderRadius: "14px",
+    padding: "12px 16px",
+    fontSize: "14px",
+    fontWeight: 700,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
   messageBox: {
     background: "#f8fafc",
     color: "#334155",
@@ -569,48 +490,38 @@ const styles = {
   summaryGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "16px",
-    marginBottom: "20px",
+    gap: "14px",
+    marginBottom: "18px",
   },
   summaryCard: {
     background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    borderRadius: "22px",
+    border: "1px solid #dbe4ee",
+    borderRadius: "24px",
     padding: "18px",
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
   },
   summaryLabel: {
     fontSize: "13px",
     color: "#64748b",
-    marginBottom: "10px",
+    marginBottom: "8px",
   },
   summaryValue: {
     fontSize: "30px",
-    fontWeight: 800,
+    fontWeight: 900,
     color: "#0f172a",
+    lineHeight: 1.1,
   },
   summaryValueSmall: {
-    fontSize: "20px",
+    fontSize: "18px",
     fontWeight: 800,
     color: "#0f172a",
-    lineHeight: 1.4,
-  },
-  statusBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "32px",
-    padding: "0 12px",
-    borderRadius: "999px",
-    fontSize: "13px",
-    fontWeight: 700,
-    whiteSpace: "nowrap",
+    lineHeight: 1.3,
   },
   mainGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-    gap: "20px",
-    marginBottom: "20px",
+    gap: "18px",
+    marginBottom: "18px",
   },
   panel: {
     background: "#ffffff",
@@ -620,21 +531,20 @@ const styles = {
     boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
   },
   panelHeader: {
-    marginBottom: "16px",
+    marginBottom: "18px",
   },
   panelTitle: {
     margin: 0,
-    fontSize: "28px",
-    lineHeight: 1.15,
-    fontWeight: 850,
+    fontSize: "22px",
+    fontWeight: 900,
     color: "#0f172a",
-    letterSpacing: "-0.02em",
   },
   panelDesc: {
-    margin: "8px 0 0",
+    marginTop: "8px",
+    marginBottom: 0,
     fontSize: "14px",
+    lineHeight: 1.7,
     color: "#64748b",
-    lineHeight: 1.6,
   },
   infoGrid: {
     display: "grid",
@@ -653,35 +563,32 @@ const styles = {
     marginBottom: "8px",
   },
   infoValue: {
-    fontSize: "16px",
+    fontSize: "15px",
     fontWeight: 700,
     color: "#0f172a",
     lineHeight: 1.5,
     wordBreak: "break-word",
   },
-  formBlock: {
-    display: "grid",
-    gap: "12px",
-  },
-  primaryButton: {
-    background: "#059669",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "14px",
-    padding: "12px 18px",
-    fontSize: "14px",
+  statusBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "34px",
+    padding: "0 12px",
+    borderRadius: "999px",
+    fontSize: "13px",
     fontWeight: 700,
-    cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   noteBox: {
-    minHeight: "120px",
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
     borderRadius: "18px",
     padding: "16px",
-    color: "#334155",
+    minHeight: "120px",
     fontSize: "14px",
-    lineHeight: 1.8,
+    lineHeight: 1.7,
+    color: "#334155",
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
   },
@@ -697,14 +604,14 @@ const styles = {
     padding: "16px",
   },
   futureTitle: {
-    fontSize: "16px",
+    fontSize: "15px",
     fontWeight: 800,
     color: "#0f172a",
     marginBottom: "8px",
   },
   futureText: {
     fontSize: "14px",
-    color: "#475569",
     lineHeight: 1.7,
+    color: "#64748b",
   },
 };

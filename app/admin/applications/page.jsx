@@ -1,8 +1,8 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 
@@ -18,14 +18,25 @@ const DISTRIBUTION_OPTIONS = [
   { value: "only_selected", label: "Seçilmiş təşkilat" },
 ];
 
+function normalizeStatus(status) {
+  if (status === "processing") return "reviewing";
+  if (status === "sent") return "approved";
+  return status || "new";
+}
+
 function getStatusLabel(status) {
-  if (status === "processing") return "Baxılır";
-  if (status === "sent") return "Göndərildi";
-  return STATUS_OPTIONS.find((item) => item.value === status)?.label || status || "-";
+  const normalized = normalizeStatus(status);
+  return (
+    STATUS_OPTIONS.find((item) => item.value === normalized)?.label ||
+    normalized ||
+    "-"
+  );
 }
 
 function getStatusStyles(status) {
-  if (status === "new") {
+  const normalized = normalizeStatus(status);
+
+  if (normalized === "new") {
     return {
       background: "#dbeafe",
       color: "#1d4ed8",
@@ -33,7 +44,7 @@ function getStatusStyles(status) {
     };
   }
 
-  if (status === "reviewing" || status === "processing") {
+  if (normalized === "reviewing") {
     return {
       background: "#fef3c7",
       color: "#92400e",
@@ -41,7 +52,7 @@ function getStatusStyles(status) {
     };
   }
 
-  if (status === "approved" || status === "sent") {
+  if (normalized === "approved") {
     return {
       background: "#dcfce7",
       color: "#166534",
@@ -49,7 +60,7 @@ function getStatusStyles(status) {
     };
   }
 
-  if (status === "rejected") {
+  if (normalized === "rejected") {
     return {
       background: "#fee2e2",
       color: "#991b1b",
@@ -65,7 +76,9 @@ function getStatusStyles(status) {
 }
 
 function getDistributionLabel(value) {
-  return DISTRIBUTION_OPTIONS.find((item) => item.value === value)?.label || "-";
+  return (
+    DISTRIBUTION_OPTIONS.find((item) => item.value === value)?.label || "-"
+  );
 }
 
 function getDistributionStyles(value) {
@@ -112,7 +125,7 @@ function formatDate(value) {
 
 export default function ApplicationsPage() {
   const router = useRouter();
- 
+
   const [applications, setApplications] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -122,53 +135,58 @@ export default function ApplicationsPage() {
   const [distributionFilter, setDistributionFilter] = useState("all");
   const [updatingId, setUpdatingId] = useState(null);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const auth = localStorage.getItem("valyutacred_auth");
-
-      if (!auth) {
-        router.push("/login");
-        return;
-      }
-
-      const parsed = JSON.parse(auth);
-
-      if (parsed.role !== "super_admin" && parsed.role !== "admin") {
-        router.push("/login");
-        return;
-      }
-
-      setLoading(true);
-
-      const [applicationsRes, organizationsRes] = await Promise.all([
-        supabase.from("applications").select("*").order("id", { ascending: false }),
-        supabase.from("organizations").select("id, name").order("id", { ascending: true }),
-      ]);
-
-      if (applicationsRes.error) {
-        setPageMessage("Müraciətlər yüklənmədi: " + applicationsRes.error.message);
-        setLoading(false);
-        return;
-      }
-
-      if (organizationsRes.error) {
-        setPageMessage("Təşkilatlar yüklənmədi: " + organizationsRes.error.message);
-        setLoading(false);
-        return;
-      }
-
-      setApplications(applicationsRes.data || []);
-      setOrganizations(organizationsRes.data || []);
-      setLoading(false);
-    } catch (error) {
-      localStorage.removeItem("valyutacred_auth");
-      router.push("/login");
-    }
-  }, [router]);
-
   useEffect(() => {
-  fetchData();
-}, [fetchData]);
+    async function fetchData() {
+      try {
+        const auth = localStorage.getItem("valyutacred_auth");
+
+        if (!auth) {
+          router.push("/login");
+          return;
+        }
+
+        const parsed = JSON.parse(auth);
+
+        if (parsed.role !== "super_admin" && parsed.role !== "admin") {
+          router.push("/login");
+          return;
+        }
+
+        setLoading(true);
+        setPageMessage("");
+
+        const [applicationsRes, organizationsRes] = await Promise.all([
+          supabase.from("applications").select("*").order("id", { ascending: false }),
+          supabase.from("organizations").select("id, name").order("id", { ascending: true }),
+        ]);
+
+        if (applicationsRes.error) {
+          setPageMessage("Müraciətlər yüklənmədi: " + applicationsRes.error.message);
+          setApplications([]);
+          setOrganizations([]);
+          setLoading(false);
+          return;
+        }
+
+        if (organizationsRes.error) {
+          setPageMessage("Təşkilatlar yüklənmədi: " + organizationsRes.error.message);
+          setApplications(applicationsRes.data || []);
+          setOrganizations([]);
+          setLoading(false);
+          return;
+        }
+
+        setApplications(applicationsRes.data || []);
+        setOrganizations(organizationsRes.data || []);
+        setLoading(false);
+      } catch (error) {
+        localStorage.removeItem("valyutacred_auth");
+        router.push("/login");
+      }
+    }
+
+    fetchData();
+  }, [router]);
 
   const organizationMap = useMemo(() => {
     const map = {};
@@ -188,8 +206,10 @@ export default function ApplicationsPage() {
         (item.phone || "").toLowerCase().includes(s) ||
         String(item.id).includes(s);
 
+      const normalizedStatus = normalizeStatus(item.status);
+
       const matchesStatus =
-        statusFilter === "all" ? true : item.status === statusFilter;
+        statusFilter === "all" ? true : normalizedStatus === statusFilter;
 
       const matchesDistribution =
         distributionFilter === "all"
@@ -200,51 +220,41 @@ export default function ApplicationsPage() {
     });
   }, [applications, search, statusFilter, distributionFilter]);
 
-  async function updateStatus(id, currentStatus) {
-    const normalizedCurrent =
-      currentStatus === "processing"
-        ? "reviewing"
-        : currentStatus === "sent"
-        ? "approved"
-        : currentStatus;
+  async function updateStatus(id, nextStatus) {
+    const applicationId = Number(id);
 
-    const currentIndex = STATUS_OPTIONS.findIndex(
-      (item) => item.value === normalizedCurrent
-    );
-
-    const nextStatus =
-      currentIndex === -1
-        ? "new"
-        : STATUS_OPTIONS[(currentIndex + 1) % STATUS_OPTIONS.length].value;
-
-    setUpdatingId(id);
+    setUpdatingId(applicationId);
     setPageMessage("");
 
-    const { data, error } = await supabase
+    const { data: updatedRows, error: updateError } = await supabase
       .from("applications")
       .update({ status: nextStatus })
-      .eq("id", id)
-      .select("*")
-      .single();
+      .eq("id", applicationId)
+      .select("id, status");
 
-    setUpdatingId(null);
-
-    if (error) {
-      setPageMessage("Status yenilənmədi: " + error.message);
+    if (updateError) {
+      setUpdatingId(null);
+      setPageMessage("Status yenilənmədi: " + updateError.message);
       return;
     }
 
-    if (!data) {
-      setPageMessage("Status DB-də yenilənmədi.");
+    const updatedRow = Array.isArray(updatedRows) ? updatedRows[0] : null;
+
+    if (!updatedRow) {
+      setUpdatingId(null);
+      setPageMessage("DB update etmədi.");
       return;
     }
 
     setApplications((prev) =>
       prev.map((item) =>
-        item.id === id ? { ...item, status: data.status } : item
+        Number(item.id) === applicationId
+          ? { ...item, status: updatedRow.status }
+          : item
       )
     );
 
+    setUpdatingId(null);
     setPageMessage("Müraciətin statusu yeniləndi.");
   }
 
@@ -258,7 +268,8 @@ export default function ApplicationsPage() {
         <div>
           <h1 style={styles.title}>Müraciətlər</h1>
           <p style={styles.subtitle}>
-            Burada daxil olan kredit müraciətlərini axtara, paylaşım tipinə görə ayıra, statusunu dəyişə və detal səhifəsinə keçə bilərsən.
+            Burada daxil olan kredit müraciətlərini axtara, paylaşım tipinə görə ayıra,
+            statusunu dəyişə və detal səhifəsinə keçə bilərsən.
           </p>
         </div>
       </div>
@@ -267,7 +278,7 @@ export default function ApplicationsPage() {
 
       <div style={styles.panel}>
         <div style={styles.filtersRow}>
-          <div>
+          <div style={styles.filterItem}>
             <label style={styles.label}>Axtarış</label>
             <input
               placeholder="ID, ad soyad və ya telefon"
@@ -277,7 +288,7 @@ export default function ApplicationsPage() {
             />
           </div>
 
-          <div>
+          <div style={styles.filterItem}>
             <label style={styles.label}>Status</label>
             <select
               value={statusFilter}
@@ -293,7 +304,7 @@ export default function ApplicationsPage() {
             </select>
           </div>
 
-          <div>
+          <div style={styles.filterItem}>
             <label style={styles.label}>Paylaşım tipi</label>
             <select
               value={distributionFilter}
@@ -301,38 +312,9 @@ export default function ApplicationsPage() {
               style={styles.select}
             >
               <option value="all">Hamısı</option>
-              {DISTRIBUTION_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
+              <option value="open_market">Çoxlu təşkilata açıq</option>
+              <option value="only_selected">Seçilmiş təşkilat</option>
             </select>
-          </div>
-        </div>
-
-        <div style={styles.summaryRow}>
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Ümumi müraciət</div>
-            <div style={styles.summaryValue}>{applications.length}</div>
-          </div>
-
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Filtrdən keçən</div>
-            <div style={styles.summaryValue}>{filteredApplications.length}</div>
-          </div>
-
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Çoxlu təşkilata açıq</div>
-            <div style={styles.summaryValue}>
-              {applications.filter((item) => item.distribution_type === "open_market").length}
-            </div>
-          </div>
-
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Seçilmiş təşkilat</div>
-            <div style={styles.summaryValue}>
-              {applications.filter((item) => item.distribution_type === "only_selected").length}
-            </div>
           </div>
         </div>
 
@@ -355,8 +337,8 @@ export default function ApplicationsPage() {
 
             <tbody>
               {filteredApplications.map((item) => {
-                const statusStyle = getStatusStyles(item.status);
                 const distributionStyle = getDistributionStyles(item.distribution_type);
+                const currentStatusStyle = getStatusStyles(item.status);
 
                 return (
                   <tr key={item.id}>
@@ -366,32 +348,40 @@ export default function ApplicationsPage() {
                     <td style={styles.td}>{item.phone || "-"}</td>
                     <td style={styles.td}>{formatMoney(item.amount)}</td>
                     <td style={styles.td}>{formatMoney(item.monthly_income)}</td>
+
                     <td style={styles.td}>
                       <span style={{ ...styles.badge, ...distributionStyle }}>
                         {getDistributionLabel(item.distribution_type)}
                       </span>
                     </td>
+
                     <td style={styles.td}>
                       {item.distribution_type === "only_selected"
                         ? organizationMap[item.selected_organization_id] || "-"
                         : "-"}
                     </td>
+
                     <td style={styles.td}>
-                      <span style={{ ...styles.badge, ...statusStyle }}>
-                        {getStatusLabel(item.status)}
-                      </span>
+                      <select
+                        value={normalizeStatus(item.status)}
+                        onChange={(e) => updateStatus(item.id, e.target.value)}
+                        disabled={updatingId === item.id}
+                        style={{
+                          ...styles.statusSelect,
+                          ...currentStatusStyle,
+                          ...(updatingId === item.id ? styles.statusSelectDisabled : {}),
+                        }}
+                      >
+                        {STATUS_OPTIONS.map((statusItem) => (
+                          <option key={statusItem.value} value={statusItem.value}>
+                            {statusItem.label}
+                          </option>
+                        ))}
+                      </select>
                     </td>
+
                     <td style={styles.td}>
                       <div style={styles.actionsCell}>
-                        <button
-                          type="button"
-                          style={styles.secondaryButton}
-                          onClick={() => updateStatus(item.id, item.status)}
-                          disabled={updatingId === item.id}
-                        >
-                          {updatingId === item.id ? "Yenilənir..." : "Status dəyiş"}
-                        </button>
-
                         <Link
                           href={`/admin/applications/${item.id}`}
                           style={styles.primaryLink}
@@ -458,97 +448,81 @@ const styles = {
   },
   filtersRow: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: "14px",
     marginBottom: "18px",
   },
+  filterItem: {
+    display: "flex",
+    flexDirection: "column",
+  },
   label: {
-    display: "block",
-    marginBottom: "8px",
-    fontSize: "14px",
+    fontSize: "13px",
     fontWeight: 700,
-    color: "#0f172a",
+    color: "#334155",
+    marginBottom: "8px",
   },
   input: {
     width: "100%",
-    height: "48px",
-    boxSizing: "border-box",
-    borderRadius: "16px",
-    border: "1px solid #cbd5e1",
+    minHeight: "46px",
+    borderRadius: "14px",
+    border: "1px solid #dbe4ee",
     background: "#ffffff",
     padding: "0 14px",
-    fontSize: "15px",
+    fontSize: "14px",
     color: "#0f172a",
     outline: "none",
   },
   select: {
     width: "100%",
-    height: "48px",
-    boxSizing: "border-box",
-    borderRadius: "16px",
-    border: "1px solid #cbd5e1",
+    minHeight: "46px",
+    borderRadius: "14px",
+    border: "1px solid #dbe4ee",
     background: "#ffffff",
     padding: "0 14px",
-    fontSize: "15px",
+    fontSize: "14px",
     color: "#0f172a",
     outline: "none",
   },
-  summaryRow: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: "14px",
-    marginBottom: "18px",
-  },
-  summaryCard: {
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "20px",
-    padding: "16px",
-  },
-  summaryLabel: {
-    fontSize: "13px",
-    color: "#64748b",
-    marginBottom: "8px",
-  },
-  summaryValue: {
-    fontSize: "28px",
-    fontWeight: 800,
-    color: "#0f172a",
-  },
   tableWrap: {
+    width: "100%",
     overflowX: "auto",
+    border: "1px solid #e2e8f0",
+    borderRadius: "22px",
   },
   table: {
     width: "100%",
-    borderCollapse: "collapse",
     minWidth: "1180px",
+    borderCollapse: "separate",
+    borderSpacing: 0,
+    background: "#ffffff",
   },
   tableHeadRow: {
     background: "#f8fafc",
-    textAlign: "left",
   },
   th: {
-    padding: "14px 16px",
-    borderBottom: "1px solid #e2e8f0",
-    fontSize: "14px",
-    color: "#334155",
+    textAlign: "left",
+    padding: "16px 14px",
+    fontSize: "13px",
     fontWeight: 800,
+    color: "#475569",
+    borderBottom: "1px solid #e2e8f0",
     whiteSpace: "nowrap",
   },
   td: {
-    padding: "14px 16px",
-    borderBottom: "1px solid #f1f5f9",
+    padding: "14px",
     fontSize: "14px",
     color: "#334155",
+    borderBottom: "1px solid #eef2f7",
     verticalAlign: "middle",
     whiteSpace: "nowrap",
   },
   tdStrong: {
-    padding: "14px 16px",
-    borderBottom: "1px solid #f1f5f9",
+    padding: "14px",
     fontSize: "14px",
+    fontWeight: 800,
     color: "#0f172a",
-    fontWeight: 700,
+    borderBottom: "1px solid #eef2f7",
     verticalAlign: "middle",
     whiteSpace: "nowrap",
   },
@@ -556,51 +530,50 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "32px",
+    minHeight: "34px",
     padding: "0 12px",
     borderRadius: "999px",
     fontSize: "13px",
     fontWeight: 700,
     whiteSpace: "nowrap",
   },
-  actionsCell: {
-    display: "flex",
-    gap: "10px",
-    flexWrap: "wrap",
-  },
-  secondaryButton: {
-    background: "#ffffff",
-    color: "#0f172a",
-    border: "1px solid #cbd5e1",
-    borderRadius: "12px",
-    padding: "10px 14px",
+  statusSelect: {
+    minWidth: "140px",
+    minHeight: "38px",
+    borderRadius: "999px",
+    padding: "0 12px",
     fontSize: "13px",
     fontWeight: 700,
+    outline: "none",
     cursor: "pointer",
-    whiteSpace: "nowrap",
+  },
+  statusSelectDisabled: {
+    opacity: 0.7,
+    cursor: "not-allowed",
+  },
+  actionsCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
   },
   primaryLink: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    textDecoration: "none",
-    background: "#059669",
-    color: "#ffffff",
-    border: "1px solid #059669",
+    minHeight: "38px",
+    padding: "0 14px",
     borderRadius: "12px",
-    padding: "10px 14px",
+    background: "#0f172a",
+    color: "#ffffff",
     fontSize: "13px",
     fontWeight: 700,
+    textDecoration: "none",
     whiteSpace: "nowrap",
   },
   emptyBox: {
-    background: "#f8fafc",
-    border: "1px dashed #cbd5e1",
-    borderRadius: "18px",
     padding: "18px",
-    color: "#64748b",
-    textAlign: "center",
     fontSize: "14px",
-    marginTop: "16px",
+    color: "#64748b",
+    background: "#ffffff",
   },
 };
