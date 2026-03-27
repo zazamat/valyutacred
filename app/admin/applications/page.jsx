@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 
 const STATUS_OPTIONS = [
@@ -112,9 +112,7 @@ function formatDate(value) {
 
 export default function ApplicationsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const updatedKey = searchParams.get("updated");
-
+ 
   const [applications, setApplications] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -169,8 +167,8 @@ export default function ApplicationsPage() {
   }, [router]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData, updatedKey]);
+  fetchData();
+}, [fetchData]);
 
   const organizationMap = useMemo(() => {
     const map = {};
