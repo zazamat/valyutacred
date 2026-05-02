@@ -25,8 +25,8 @@ export default function AdminLayout({ children }) {
         <div style={styles.brandWrap}>
           <div style={styles.brandIcon}>◔</div>
           <div>
-            <div style={styles.brandTitle}>ValyutaCred Admin</div>
-            <div style={styles.brandSub}>Lead və kredit idarəetmə paneli</div>
+            <div style={styles.brandTitle}>VaBank Admin</div>
+            <div style={styles.brandSub}>Kredit müraciətləri və idarəetmə paneli</div>
           </div>
         </div>
 
