@@ -38,7 +38,6 @@ const TABLE_COLUMNS = [
   { key: "phone", label: "Telefon", exportable: true },
   { key: "email", label: "Email", exportable: true },
   { key: "customerType", label: "Müştəri tipi", exportable: true },
-  { key: "customerType", label: "Müştəri tipi", exportable: true },
   { key: "creditType", label: "Kredit növü", exportable: true },
   { key: "organization", label: "Bank", exportable: true },
   { key: "amount", label: "Məbləğ", exportable: true },
@@ -295,9 +294,11 @@ export default function ApplicationsPage() {
       }
 
       const allowedKeys = TABLE_COLUMNS.map((column) => column.key);
-      const cleanKeys = parsed.filter((key) => allowedKeys.includes(key));
+      const cleanKeys = Array.from(
+  new Set(parsed.filter((key) => allowedKeys.includes(key)))
+);
 
-      return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
+return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
     } catch (error) {
       return DEFAULT_VISIBLE_COLUMNS;
     }
