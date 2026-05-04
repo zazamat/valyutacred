@@ -34,7 +34,7 @@ const FLAG_STATUS_LABELS = {
   active: "Aktiv",
   under_review: "Araşdırılır",
   resolved: "Həll edildi",
-  rejected: "Rədd edildi",
+  rejected: "Əsassız sayıldı",
 };
 
 function normalizeStatus(status) {
@@ -144,6 +144,7 @@ export default function ApplicationDetailPage() {
   const [flagReason, setFlagReason] = useState("");
   const [flagLoading, setFlagLoading] = useState(false);
   const [flagMessage, setFlagMessage] = useState("");
+const [updatingFlagId, setUpdatingFlagId] = useState(null);
 
   const organizationMap = useMemo(() => {
     const map = {};
@@ -159,21 +160,7 @@ export default function ApplicationDetailPage() {
 
   async function fetchData() {
     try {
-      const auth = localStorage.getItem("valyutacred_auth");
-
-      if (!auth) {
-        router.push("/login");
-        return;
-      }
-
-      const parsed = JSON.parse(auth);
-
-      if (parsed.role !== "super_admin" && parsed.role !== "admin") {
-        router.push("/login");
-        return;
-      }
-
-      setLoading(true);
+            setLoading(true);
       setPageMessage("");
 
       const [applicationRes, organizationsRes, flagsRes] = await Promise.all([
@@ -250,25 +237,42 @@ export default function ApplicationDetailPage() {
     if (!application?.id) return;
 
     if (activeFlagExists) {
-      setFlagMessage("Bu müraciət üzrə artıq aktiv problemli müştəri qeydi var.");
-      return;
-    }
+  setFlagMessage("Bu müraciət üzrə artıq aktiv problemli müştəri qeydi var.");
+  return;
+}
 
-    setFlagLoading(true);
-    setFlagMessage("");
+if (!flagReason.trim()) {
+  setFlagMessage("Problemli müştəri qeydi üçün səbəb yazmaq məcburidir.");
+  return;
+}
 
-    const { data, error } = await supabase
+setFlagLoading(true);
+setFlagMessage("");
+
+let currentAdmin = null;
+
+try {
+  const auth = localStorage.getItem("valyutacred_auth");
+  currentAdmin = auth ? JSON.parse(auth) : null;
+} catch (error) {
+  currentAdmin = null;
+}
+
+const { data, error } = await supabase
       .from("customer_flags")
       .insert([
         {
-          application_id: application.id,
-          phone: application.phone || "",
-          email: application.email || "",
-          customer_name: application.full_name || "",
-          flagged_by_organization_id: application.selected_organization_id || null,
-          reason: flagReason || null,
-          status: "active",
-        },
+  application_id: application.id,
+  phone: application.phone || "",
+  email: application.email || "",
+  customer_name: application.full_name || "",
+  flagged_by_organization_id: application.selected_organization_id || null,
+  flagged_by_name: currentAdmin?.fullName || "Admin",
+  flagged_by_role: currentAdmin?.role || "admin",
+  flagged_by_email: currentAdmin?.email || "",
+  reason: flagReason || null,
+  status: "active",
+},
       ])
       .select("*")
       .single();
@@ -284,7 +288,32 @@ export default function ApplicationDetailPage() {
     setFlagReason("");
     setFlagLoading(false);
   }
+async function updateFlagStatus(flagId, nextStatus) {
+  if (!flagId) return;
 
+  setUpdatingFlagId(flagId);
+  setFlagMessage("");
+
+  const { data, error } = await supabase
+    .from("customer_flags")
+    .update({ status: nextStatus })
+    .eq("id", Number(flagId))
+    .select("*")
+    .single();
+
+  if (error) {
+    setFlagMessage("Problemli qeyd statusu yenilənmədi: " + error.message);
+    setUpdatingFlagId(null);
+    return;
+  }
+
+  setCustomerFlags((prev) =>
+    prev.map((item) => (item.id === flagId ? data : item))
+  );
+
+  setFlagMessage("Problemli qeyd statusu yeniləndi.");
+  setUpdatingFlagId(null);
+}
   if (loading) {
     return <div style={styles.loadingBox}>Yüklənir...</div>;
   }
@@ -468,14 +497,22 @@ export default function ApplicationDetailPage() {
           {flagMessage ? <div style={styles.inlineMessage}>{flagMessage}</div> : null}
 
           <div style={styles.formBlock}>
-            <label style={styles.formLabel}>Səbəb (istəyə uyğun)</label>
+            <label style={styles.formLabel}>Səbəb (məcburi)</label>
 
             <textarea
-              value={flagReason}
-              onChange={(e) => setFlagReason(e.target.value)}
-              placeholder="İmtina səbəbi və ya problem qeydi yazın"
-              style={styles.textarea}
-            />
+  value={flagReason}
+  onChange={(e) => setFlagReason(e.target.value)}
+  placeholder={
+    activeFlagExists
+      ? "Aktiv problemli qeyd olduğu üçün yeni qeyd yazmaq bağlıdır"
+      : "Problemli müştəri səbəbini yazın"
+  }
+  disabled={activeFlagExists}
+  style={{
+    ...styles.textarea,
+    ...(activeFlagExists ? styles.disabledTextarea : {}),
+  }}
+/>
           </div>
 
           <button
@@ -509,18 +546,48 @@ export default function ApplicationDetailPage() {
                   return (
                     <div key={flag.id} style={styles.flagItem}>
                       <div style={styles.flagTop}>
-                        <span style={{ ...styles.statusBadge, ...flagStatusStyle }}>
-                          {FLAG_STATUS_LABELS[flag.status] || flag.status || "-"}
-                        </span>
+                        <select
+  value={flag.status || "active"}
+  onChange={(e) => updateFlagStatus(flag.id, e.target.value)}
+  disabled={updatingFlagId === flag.id}
+  style={{
+    ...styles.flagStatusSelect,
+    ...flagStatusStyle,
+    ...(updatingFlagId === flag.id ? styles.disabled : {}),
+  }}
+>
+  {Object.entries(FLAG_STATUS_LABELS).map(([value, label]) => (
+    <option key={value} value={value}>
+      {label}
+    </option>
+  ))}
+</select>
 
                         <span style={styles.flagDate}>
                           {formatDateTime(flag.created_at)}
                         </span>
                       </div>
 
-                      <div style={styles.flagReasonText}>
-                        {flag.reason || "Səbəb qeyd olunmayıb."}
-                      </div>
+                      <div style={styles.flagMetaBox}>
+  <div style={styles.flagMetaItem}>
+    <strong>Qeydi yazan:</strong>{" "}
+    {flag.flagged_by_name || "Admin"}
+  </div>
+
+  <div style={styles.flagMetaItem}>
+    <strong>Rol:</strong>{" "}
+    {flag.flagged_by_role || "-"}
+  </div>
+
+  <div style={styles.flagMetaItem}>
+    <strong>Email:</strong>{" "}
+    {flag.flagged_by_email || "-"}
+  </div>
+</div>
+
+<div style={styles.flagReasonText}>
+  {flag.reason || "Səbəb qeyd olunmayıb."}
+</div>
                     </div>
                   );
                 })}
@@ -789,6 +856,16 @@ const styles = {
     fontWeight: 600,
     whiteSpace: "nowrap",
   },
+flagStatusSelect: {
+  minHeight: "34px",
+  borderRadius: "999px",
+  padding: "0 12px",
+  fontSize: "13px",
+  fontWeight: 700,
+  outline: "none",
+  cursor: "pointer",
+  fontFamily: "inherit",
+},
 
   formBlock: {
     background: "#f8fafc",
@@ -817,6 +894,11 @@ const styles = {
     outline: "none",
     resize: "vertical",
     fontFamily: "inherit",
+    disabledTextarea: {
+  background: "#f1f5f9",
+  color: "#94a3b8",
+  cursor: "not-allowed",
+},
   },
 
   dangerButton: {
@@ -881,7 +963,21 @@ const styles = {
     fontSize: "13px",
     color: "#64748b",
   },
+flagMetaBox: {
+  background: "#ffffff",
+  border: "1px solid #e2e8f0",
+  borderRadius: "14px",
+  padding: "10px 12px",
+  marginBottom: "10px",
+  display: "grid",
+  gap: "6px",
+},
 
+flagMetaItem: {
+  fontSize: "13px",
+  lineHeight: 1.5,
+  color: "#475569",
+},
   flagReasonText: {
     fontSize: "14px",
     lineHeight: 1.7,

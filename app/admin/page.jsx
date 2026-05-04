@@ -1,249 +1,215 @@
 "use client";
+
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-
-const cards = [
+const stats = [
   {
-    title: "Müraciətlər",
+    title: "Ümumi müraciətlər",
     value: "2 500+",
-    desc: "Daxil olan kredit müraciətləri",
-  },
-  {
-    title: "Aktiv təşkilatlar",
-    value: "12",
-    desc: "Sistemə qoşulmuş tərəfdaşlar",
+    desc: "Platformaya daxil olan bütün kredit müraciətləri",
+    tag: "Demo",
   },
   {
     title: "Bu gün",
     value: "48",
-    desc: "Yeni müraciət sayı",
+    desc: "Bugünkü yeni müraciət sayı",
+    tag: "Demo",
   },
   {
-    title: "Konversiya",
-    value: "18%",
-    desc: "Təxmini ilkin dönüşüm",
+    title: "Bu ay",
+    value: "1 284",
+    desc: "Cari ay üzrə müraciət sayı",
+    tag: "Demo",
+  },
+  {
+    title: "Bu il",
+    value: "14 760",
+    desc: "İllik ümumi müraciət sayı",
+    tag: "Demo",
+  },
+  {
+    title: "Open market",
+    value: "1 680",
+    desc: "Bütün banklara açıq müraciətlər",
+    tag: "Demo",
+  },
+  {
+    title: "Seçilmiş bank",
+    value: "820",
+    desc: "Yalnız seçilmiş banka göndərilən müraciətlər",
+    tag: "Demo",
+  },
+  {
+    title: "Aktiv risk",
+    value: "27",
+    desc: "Problemli müştəri qeydləri",
+    tag: "Demo",
+  },
+  {
+    title: "Araşdırılır",
+    value: "9",
+    desc: "Araşdırma tələb edən risk qeydləri",
+    tag: "Demo",
   },
 ];
 
-const leads = [
+const incomeStats = [
   {
-    name: "Elvin Məmmədov",
-    phone: "+994 50 111 22 33",
-    organizationType: "Bank",
-    organization: "Kapital Bank",
-    product: "Nağd kredit",
-    amount: "12 000 AZN",
-    status: "Yeni",
+    title: "Günlük qazanc",
+    value: "420 AZN",
+    desc: "Demo lead gəliri",
   },
   {
-    name: "Aysel Həsənova",
-    phone: "+994 55 444 55 66",
-    organizationType: "BOKT",
-    organization: "Finoko",
-    product: "Biznes krediti",
-    amount: "20 000 AZN",
-    status: "Baxılır",
+    title: "Aylıq qazanc",
+    value: "12 850 AZN",
+    desc: "Demo aylıq gəlir",
   },
   {
-    name: "Murad Əliyev",
-    phone: "+994 70 777 88 99",
-    organizationType: "Bank",
-    organization: "Unibank",
-    product: "İpoteka",
-    amount: "85 000 AZN",
-    status: "Göndərildi",
+    title: "İllik qazanc",
+    value: "148 600 AZN",
+    desc: "Demo illik gəlir",
+  },
+  {
+    title: "Satılmış lead",
+    value: "386",
+    desc: "Demo lead satış sayı",
   },
 ];
 
-const getStatusBadgeStyle = (status) => {
-  const map = {
-    Yeni: {
-      background: "#dbeafe",
-      color: "#1d4ed8",
-    },
-    Baxılır: {
-      background: "#fef3c7",
-      color: "#92400e",
-    },
-    Göndərildi: {
-      background: "#dcfce7",
-      color: "#166534",
-    },
-  };
-
-  return {
-    ...styles.statusBadge,
-    ...(map[status] || map["Yeni"]),
-  };
-};
+const regionStats = [
+  { name: "Bakı", value: "1 180" },
+  { name: "Abşeron", value: "420" },
+  { name: "Gəncə", value: "260" },
+  { name: "Sumqayıt", value: "210" },
+  { name: "Quba-Xaçmaz", value: "160" },
+];
 
 export default function AdminPage() {
-  const router = useRouter();
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    try {
-      const auth = localStorage.getItem("valyutacred_auth");
-
-      if (!auth) {
-        router.push("/login");
-        return;
-      }
-
-      const parsed = JSON.parse(auth);
-
-      if (parsed.role !== "super_admin" && parsed.role !== "admin") {
-        router.push("/login");
-        return;
-      }
-
-      setIsCheckingAuth(false);
-    } catch (error) {
-      localStorage.removeItem("valyutacred_auth");
-      router.push("/login");
-    }
-  }, [router]);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 992);
-    };
-
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-
-    return () => {
-      window.removeEventListener("resize", checkMobile);
-    };
-  }, []);
-
-  if (isCheckingAuth) {
-    return null;
-  }
-
   return (
     <div>
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>Müraciətlər və platforma statistikası</h1>
+          <div style={styles.kicker}>Platforma statistikası</div>
+          <h1 style={styles.title}>Dashboard</h1>
           <p style={styles.subtitle}>
-            Buradan müraciətləri, təşkilatları, məhsulları, statusları və ümumi axını idarə etmək mümkündür.
+            VaBank admin panelində müraciətlər, gəlir modeli, risklər və platforma
+            göstəriciləri üçün ümumi baxış.
           </p>
         </div>
+
+        <div style={styles.demoNotice}>Demo struktur</div>
       </div>
 
-      <div
-        style={{
-          ...styles.cardsGrid,
-          gridTemplateColumns: isMobile
-            ? "1fr"
-            : "repeat(auto-fit, minmax(220px, 1fr))",
-        }}
-      >
-        {cards.map((card) => (
-          <div key={card.title} style={styles.card}>
-            <div style={styles.cardLabel}>{card.title}</div>
-            <div style={styles.cardValue}>{card.value}</div>
-            <div style={styles.cardDesc}>{card.desc}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={styles.sectionsGrid}>
-        <div style={styles.tablePanel}>
-          <div style={styles.tablePanelHeader}>
-            <div>
-              <div
-                style={{
-                  ...styles.sectionTitle,
-                  fontSize: isMobile ? "20px" : "22px",
-                }}
-              >
-                Son müraciətlər
-              </div>
-              <div style={styles.sectionDesc}>
-                Kredit müraciətlərinin cari siyahısı
-              </div>
-            </div>
-
-            <button type="button" style={styles.filterButton}>
-              Filtr
-            </button>
-          </div>
-
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr style={styles.tableHeadRow}>
-                  <th style={styles.th}>Ad</th>
-                  <th style={styles.th}>Telefon</th>
-                  <th style={styles.th}>Növ</th>
-                  <th style={styles.th}>Təşkilat</th>
-                  <th style={styles.th}>Məhsul</th>
-                  <th style={styles.th}>Məbləğ</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead) => (
-                  <tr key={lead.name}>
-                    <td style={styles.td}>{lead.name}</td>
-                    <td style={styles.td}>{lead.phone}</td>
-                    <td style={styles.td}>{lead.organizationType}</td>
-                    <td style={styles.td}>{lead.organization}</td>
-                    <td style={styles.td}>{lead.product}</td>
-                    <td style={styles.td}>{lead.amount}</td>
-                    <td style={styles.td}>
-                      <span style={getStatusBadgeStyle(lead.status)}>{lead.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div
-          style={{
-            ...styles.sideGrid,
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-          }}
-        >
-          <div style={styles.sidePanel}>
-            <div style={styles.sidePanelTitle}>Sürətli əməliyyatlar</div>
-
-            <div style={styles.actionsStack}>
-              <Link href="/admin/applications" style={styles.primaryAction}>
-                Müraciətləri aç
-              </Link>
-
-              <Link href="/admin/organizations" style={styles.secondaryAction}>
-                Təşkilatları idarə et
-              </Link>
-
-              <Link href="/admin/products" style={styles.secondaryAction}>
-                Məhsulları idarə et
-              </Link>
-
-              <Link href="/admin/requirements" style={styles.secondaryAction}>
-                Şərtləri idarə et
-              </Link>
-            </div>
-          </div>
-
-          <div style={styles.sidePanel}>
-            <div style={styles.sidePanelTitle}>Növbəti addım</div>
-            <p style={styles.sidePanelText}>
-              Sonrakı mərhələdə bu panelə real müraciət siyahısı, rol əsaslı giriş, təşkilat kabineti,
-              məhsul idarəsi və lead status dəyişimi əlavə ediləcək.
+      <section style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Müraciət göstəriciləri</h2>
+            <p style={styles.sectionDesc}>
+              Əsas müraciət və risk göstəriciləri
             </p>
           </div>
         </div>
-      </div>
+
+        <div style={styles.cardsGrid}>
+          {stats.map((item) => (
+            <div key={item.title} style={styles.card}>
+              <div style={styles.cardTop}>
+                <div style={styles.cardTitle}>{item.title}</div>
+                <span style={styles.cardTag}>{item.tag}</span>
+              </div>
+
+              <div style={styles.cardValue}>{item.value}</div>
+              <div style={styles.cardDesc}>{item.desc}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Gəlir göstəriciləri</h2>
+            <p style={styles.sectionDesc}>
+              Hələlik demo rəqəmlərdir. Lead marketplace qoşulanda real data ilə
+              əvəz olunacaq.
+            </p>
+          </div>
+        </div>
+
+        <div style={styles.cardsGrid}>
+          {incomeStats.map((item) => (
+            <div key={item.title} style={styles.card}>
+              <div style={styles.cardTop}>
+                <div style={styles.cardTitle}>{item.title}</div>
+                <span style={styles.cardTag}>Demo</span>
+              </div>
+
+              <div style={styles.incomeValue}>{item.value}</div>
+              <div style={styles.cardDesc}>{item.desc}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section style={styles.bottomGrid}>
+        <div style={styles.panel}>
+          <div style={styles.panelHeader}>
+            <div>
+              <h2 style={styles.sectionTitle}>Regionlara görə müraciətlər</h2>
+              <p style={styles.sectionDesc}>
+                Demo region bölgüsü. Sonradan real region datasına bağlanacaq.
+              </p>
+            </div>
+          </div>
+
+          <div style={styles.regionList}>
+            {regionStats.map((item) => (
+              <div key={item.name} style={styles.regionRow}>
+                <span>{item.name}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={styles.panel}>
+          <div style={styles.panelHeader}>
+            <div>
+              <h2 style={styles.sectionTitle}>Sistem vəziyyəti</h2>
+              <p style={styles.sectionDesc}>
+                Platformanın əsas modulları üzrə ümumi status.
+              </p>
+            </div>
+          </div>
+
+          <div style={styles.statusList}>
+            <div style={styles.statusRow}>
+              <span>Admin panel</span>
+              <strong style={styles.greenText}>Aktiv</strong>
+            </div>
+
+            <div style={styles.statusRow}>
+              <span>Müraciətlər modulu</span>
+              <strong style={styles.greenText}>Aktiv</strong>
+            </div>
+
+            <div style={styles.statusRow}>
+              <span>Smart Table</span>
+              <strong style={styles.greenText}>Aktiv</strong>
+            </div>
+
+            <div style={styles.statusRow}>
+              <span>Lead marketplace</span>
+              <strong style={styles.grayText}>Planlaşdırılıb</strong>
+            </div>
+
+            <div style={styles.statusRow}>
+              <span>Bank kabineti</span>
+              <strong style={styles.grayText}>Planlaşdırılıb</strong>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -251,166 +217,192 @@ export default function AdminPage() {
 const styles = {
   header: {
     marginBottom: "24px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "16px",
+    flexWrap: "wrap",
   },
+
+  kicker: {
+    fontSize: "13px",
+    fontWeight: 700,
+    color: "#059669",
+    marginBottom: "8px",
+  },
+
   title: {
     margin: 0,
-    fontSize: "56px",
-    lineHeight: 1.05,
-    fontWeight: 900,
-    letterSpacing: "-0.03em",
+    fontSize: "34px",
+    lineHeight: 1.12,
+    fontWeight: 800,
+    letterSpacing: "-0.02em",
     color: "#0f172a",
   },
+
   subtitle: {
     marginTop: "10px",
     marginBottom: 0,
-    fontSize: "16px",
+    fontSize: "15px",
     color: "#475569",
-    lineHeight: 1.7,
-    maxWidth: "920px",
+    lineHeight: 1.65,
+    maxWidth: "760px",
   },
+
+  demoNotice: {
+    minHeight: "34px",
+    borderRadius: "999px",
+    border: "1px solid #dbe4ee",
+    background: "#ffffff",
+    color: "#475569",
+    padding: "0 12px",
+    display: "flex",
+    alignItems: "center",
+    fontSize: "13px",
+    fontWeight: 700,
+  },
+
+  section: {
+    marginBottom: "24px",
+  },
+
+  sectionHeader: {
+    marginBottom: "12px",
+  },
+
+  sectionTitle: {
+    margin: 0,
+    fontSize: "18px",
+    fontWeight: 750,
+    color: "#0f172a",
+  },
+
+  sectionDesc: {
+    margin: "6px 0 0",
+    fontSize: "13px",
+    color: "#64748b",
+    lineHeight: 1.5,
+  },
+
   cardsGrid: {
     display: "grid",
-    gap: "16px",
-    marginBottom: "28px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: "14px",
   },
+
   card: {
     background: "#ffffff",
     border: "1px solid #e2e8f0",
-    borderRadius: "20px",
-    padding: "20px",
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+    borderRadius: "18px",
+    padding: "18px",
+    boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+    minHeight: "128px",
   },
-  cardLabel: {
-    fontSize: "14px",
-    color: "#64748b",
-  },
-  cardValue: {
-    fontSize: "34px",
-    fontWeight: 800,
-    color: "#059669",
-    marginTop: "8px",
-  },
-  cardDesc: {
-    fontSize: "14px",
-    color: "#475569",
-    marginTop: "8px",
-    lineHeight: 1.6,
-  },
-  sectionsGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: "20px",
-  },
-  tablePanel: {
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    borderRadius: "24px",
-    overflow: "hidden",
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
-  },
-  tablePanelHeader: {
-    padding: "20px",
-    borderBottom: "1px solid #e2e8f0",
+
+  cardTop: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: "12px",
-    flexWrap: "wrap",
+    gap: "10px",
+    marginBottom: "12px",
   },
-  sectionTitle: {
+
+  cardTitle: {
+    fontSize: "13px",
+    color: "#64748b",
+    fontWeight: 650,
+  },
+
+  cardTag: {
+    borderRadius: "999px",
+    background: "#f8fafc",
+    color: "#64748b",
+    border: "1px solid #e2e8f0",
+    padding: "4px 8px",
+    fontSize: "11px",
+    fontWeight: 700,
+  },
+
+  cardValue: {
+    fontSize: "30px",
+    fontWeight: 800,
+    color: "#059669",
+    letterSpacing: "-0.02em",
+  },
+
+  incomeValue: {
+    fontSize: "28px",
     fontWeight: 800,
     color: "#0f172a",
+    letterSpacing: "-0.02em",
   },
-  sectionDesc: {
-    fontSize: "14px",
-    color: "#64748b",
-    marginTop: "6px",
+
+  cardDesc: {
+    marginTop: "8px",
+    fontSize: "13px",
+    color: "#475569",
+    lineHeight: 1.55,
   },
-  filterButton: {
-    background: "#ffffff",
-    color: "#0f172a",
-    border: "1px solid #cbd5e1",
-    borderRadius: "12px",
-    padding: "10px 14px",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  tableWrap: {
-    overflowX: "auto",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-    minWidth: "900px",
-  },
-  tableHeadRow: {
-    background: "#f8fafc",
-    textAlign: "left",
-  },
-  th: {
-    padding: "14px 16px",
-    borderBottom: "1px solid #e2e8f0",
-    fontSize: "14px",
-  },
-  td: {
-    padding: "14px 16px",
-    borderBottom: "1px solid #f1f5f9",
-  },
-  statusBadge: {
-    display: "inline-block",
-    padding: "6px 10px",
-    borderRadius: "999px",
-    fontWeight: 700,
-    fontSize: "12px",
-  },
-  sideGrid: {
+
+  bottomGrid: {
     display: "grid",
-    gap: "20px",
-    alignContent: "start",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: "18px",
   },
-  sidePanel: {
+
+  panel: {
     background: "#ffffff",
     border: "1px solid #e2e8f0",
-    borderRadius: "24px",
-    padding: "20px",
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+    borderRadius: "20px",
+    padding: "18px",
+    boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
   },
-  sidePanelTitle: {
-    fontSize: "20px",
-    fontWeight: 800,
-    marginBottom: "14px",
-    color: "#0f172a",
+
+  panelHeader: {
+    marginBottom: "16px",
   },
-  sidePanelText: {
-    fontSize: "14px",
-    color: "#475569",
-    lineHeight: 1.7,
-    margin: 0,
-  },
-  actionsStack: {
+
+  regionList: {
     display: "grid",
-    gap: "12px",
+    gap: "10px",
   },
-  primaryAction: {
-    display: "block",
-    background: "#059669",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "14px",
-    padding: "12px 14px",
-    fontWeight: 700,
-    textAlign: "left",
-    textDecoration: "none",
+
+  regionRow: {
+    minHeight: "42px",
+    borderRadius: "12px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    padding: "0 12px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    fontSize: "14px",
+    color: "#334155",
   },
-  secondaryAction: {
-    display: "block",
-    background: "#ffffff",
-    color: "#0f172a",
-    border: "1px solid #cbd5e1",
-    borderRadius: "14px",
-    padding: "12px 14px",
-    fontWeight: 700,
-    textAlign: "left",
-    textDecoration: "none",
+
+  statusList: {
+    display: "grid",
+    gap: "10px",
+  },
+
+  statusRow: {
+    minHeight: "42px",
+    borderRadius: "12px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    padding: "0 12px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    fontSize: "14px",
+    color: "#334155",
+  },
+
+  greenText: {
+    color: "#047857",
+  },
+
+  grayText: {
+    color: "#64748b",
   },
 };
