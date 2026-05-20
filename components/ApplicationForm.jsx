@@ -1,34 +1,80 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-const banks = [
-  { id: 1, name: "Kapital Bank" },
-  { id: 2, name: "Avtogold" },
-];
-
-const products = {
-  individual: {
-    "Nağd kredit": { minAmount: 500, maxAmount: 30000, minTerm: 6, maxTerm: 60, defaultRate: 18 },
-    Avtokredit: { minAmount: 5000, maxAmount: 80000, minTerm: 12, maxTerm: 60, defaultRate: 14 },
-    İpoteka: { minAmount: 20000, maxAmount: 250000, minTerm: 60, maxTerm: 300, defaultRate: 8 },
-    "Lombard krediti": { minAmount: 300, maxAmount: 20000, minTerm: 3, maxTerm: 36, defaultRate: 24 },
-  },
-  business: {
-    "Biznes krediti": { minAmount: 5000, maxAmount: 150000, minTerm: 12, maxTerm: 84, defaultRate: 16 },
-  },
+const emptyCreditSelection = {
+  credit_form_id: "",
+  organization_id: "",
+  product_id: "",
+  amount: 0,
+  term_months: 0,
 };
 
 const initialCreditState = {
-  individual: { credit_type: "Nağd kredit", bank: "", amount: 500, term_months: 6 },
-  business: { credit_type: "Biznes krediti", bank: "", amount: 5000, term_months: 12 },
+  individual: { ...emptyCreditSelection },
+  business: { ...emptyCreditSelection },
 };
+
+function normalizeText(value = "") {
+  return String(value)
+    .toLowerCase()
+    .replace(/ə/g, "e")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ü/g, "u")
+    .replace(/ğ/g, "g")
+    .replace(/ş/g, "s")
+    .replace(/ç/g, "c");
+}
+
+function isCreditFormForCustomer(form, customerType) {
+  const text = normalizeText(form?.name || "");
+
+  if (customerType === "business") {
+    return text.includes("biznes") || text.includes("business");
+  }
+
+  return text.includes("ferdi") || text.includes("individual");
+}
+
+function sameCreditSelection(a, b) {
+  return (
+    String(a.credit_form_id || "") === String(b.credit_form_id || "") &&
+    String(a.organization_id || "") === String(b.organization_id || "") &&
+    String(a.product_id || "") === String(b.product_id || "") &&
+    Number(a.amount || 0) === Number(b.amount || 0) &&
+    Number(a.term_months || 0) === Number(b.term_months || 0)
+  );
+}
+
+function isPublicOrganizationVisible(organization) {
+  return (
+    organization?.public_visible !== false &&
+    organization?.partner_status !== "hidden"
+  );
+}
+
+function getOrganizationDisplayName(organization) {
+  if (!organization) return "";
+
+  if (organization.show_brand_name === false) {
+    return organization.public_display_name?.trim() || "Partnyor Bank";
+  }
+
+  return organization.name || organization.public_display_name?.trim() || "Partnyor Bank";
+}
 
 export default function ApplicationForm() {
   const [step, setStep] = useState(1);
   const [customerType, setCustomerType] = useState("individual");
   const [creditData, setCreditData] = useState(initialCreditState);
+  const [creditForms, setCreditForms] = useState([]);
+  const [productTypes, setProductTypes] = useState([]);
+  const [organizations, setOrganizations] = useState([]);
+  const [dbProducts, setDbProducts] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [enteredOtp, setEnteredOtp] = useState("");
   const [phoneVerified, setPhoneVerified] = useState(false);
@@ -50,22 +96,253 @@ export default function ApplicationForm() {
   });
 
   const activeCredit = creditData[customerType];
-  const activeProducts = products[customerType];
-  const selectedProduct = activeProducts[activeCredit.credit_type];
-  const canCalculate = activeCredit.credit_type && activeCredit.bank;
+
+  useEffect(() => {
+    async function loadPublicProducts() {
+      setDataLoading(true);
+      setDataError("");
+
+      const [formsRes, typesRes, orgsRes, productsRes] = await Promise.all([
+        supabase
+          .from("credit_forms")
+          .select("id, name, status")
+          .eq("status", "active")
+          .order("id", { ascending: true }),
+        supabase
+          .from("product_types")
+          .select("id, name, status")
+          .eq("status", "active")
+          .order("id", { ascending: true }),
+        supabase
+          .from("organizations")
+          .select(
+            "id, name, status, approval_status, public_visible, show_brand_name, show_logo, public_display_name, partner_status"
+          )
+          .eq("status", "active")
+          .eq("approval_status", "approved")
+          .order("id", { ascending: true }),
+        supabase
+          .from("products")
+          .select(
+            "id, product_name, credit_form_id, organization_id, product_type_id, min_amount, max_amount, min_term_months, max_term_months, default_interest, status, approval_status, is_active"
+          )
+          .eq("is_active", true)
+          .eq("status", "active")
+          .eq("approval_status", "approved")
+          .order("id", { ascending: true }),
+      ]);
+
+      const failed = [formsRes, typesRes, orgsRes, productsRes].find(
+        (res) => res.error
+      );
+
+      if (failed?.error) {
+        setDataError("Məhsul məlumatları yüklənmədi: " + failed.error.message);
+        setCreditForms([]);
+        setProductTypes([]);
+        setOrganizations([]);
+        setDbProducts([]);
+        setDataLoading(false);
+        return;
+      }
+
+      const nextForms = formsRes.data || [];
+      const nextTypes = typesRes.data || [];
+      const nextOrgs = orgsRes.data || [];
+      const nextProducts = productsRes.data || [];
+
+      const formIds = new Set(nextForms.map((item) => Number(item.id)));
+      const typeIds = new Set(nextTypes.map((item) => Number(item.id)));
+      const visibleOrgs = nextOrgs.filter(isPublicOrganizationVisible);
+      const orgIds = new Set(visibleOrgs.map((item) => Number(item.id)));
+
+      setCreditForms(nextForms);
+      setProductTypes(nextTypes);
+      setOrganizations(visibleOrgs);
+      setDbProducts(
+        nextProducts.filter(
+          (item) =>
+            formIds.has(Number(item.credit_form_id)) &&
+            typeIds.has(Number(item.product_type_id)) &&
+            orgIds.has(Number(item.organization_id))
+        )
+      );
+      setDataLoading(false);
+    }
+
+    loadPublicProducts();
+  }, []);
+
+  function getCreditFormsForType(type) {
+    const matched = creditForms.filter((item) =>
+      isCreditFormForCustomer(item, type)
+    );
+
+    return matched.length ? matched : creditForms;
+  }
+
+  function getProductsForSelection(selection = {}) {
+    return dbProducts.filter((item) => {
+      if (
+        selection.credit_form_id &&
+        String(item.credit_form_id) !== String(selection.credit_form_id)
+      ) {
+        return false;
+      }
+
+      if (
+        selection.organization_id &&
+        String(item.organization_id) !== String(selection.organization_id)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  useEffect(() => {
+    if (dataLoading) return;
+
+    setCreditData((prev) => {
+      const current = prev[customerType] || emptyCreditSelection;
+      const formsForType = getCreditFormsForType(customerType).filter((form) =>
+        dbProducts.some((product) => Number(product.credit_form_id) === Number(form.id))
+      );
+
+      const creditFormId = formsForType.some(
+        (item) => String(item.id) === String(current.credit_form_id)
+      )
+        ? current.credit_form_id
+        : formsForType[0]?.id || "";
+
+      const organizationIds = new Set(
+        creditFormId
+          ? getProductsForSelection({ credit_form_id: creditFormId }).map((item) =>
+              Number(item.organization_id)
+            )
+          : []
+      );
+      const availableOrgs = organizations.filter((item) =>
+        organizationIds.has(Number(item.id))
+      );
+
+      const organizationId = availableOrgs.some(
+        (item) => String(item.id) === String(current.organization_id)
+      )
+        ? current.organization_id
+        : "";
+
+      const availableProducts = organizationId
+        ? getProductsForSelection({
+            credit_form_id: creditFormId,
+            organization_id: organizationId,
+          })
+        : [];
+
+      const product = availableProducts.some(
+        (item) => String(item.id) === String(current.product_id)
+      )
+        ? availableProducts.find(
+            (item) => String(item.id) === String(current.product_id)
+          )
+        : null;
+
+      const nextSelection = {
+        credit_form_id: creditFormId ? String(creditFormId) : "",
+        organization_id: organizationId ? String(organizationId) : "",
+        product_id: product?.id ? String(product.id) : "",
+        amount: product ? Number(product.min_amount || 0) : 0,
+        term_months: product ? Number(product.min_term_months || 0) : 0,
+      };
+
+      if (sameCreditSelection(current, nextSelection)) return prev;
+
+      return {
+        ...prev,
+        [customerType]: nextSelection,
+      };
+    });
+  }, [customerType, dataLoading, creditForms, productTypes, organizations, dbProducts]);
+
+  const selectedProduct = useMemo(
+    () =>
+      dbProducts.find(
+        (item) => String(item.id) === String(activeCredit.product_id)
+      ) || null,
+    [dbProducts, activeCredit.product_id]
+  );
+
+  const selectedProductType = useMemo(
+    () =>
+      productTypes.find(
+        (item) => String(item.id) === String(selectedProduct?.product_type_id)
+      ) || null,
+    [productTypes, selectedProduct?.product_type_id]
+  );
+
+  const selectedOrganization = useMemo(
+    () =>
+      organizations.find(
+        (item) => String(item.id) === String(activeCredit.organization_id)
+      ) || null,
+    [organizations, activeCredit.organization_id]
+  );
+
+  const availableOrganizations = useMemo(() => {
+    if (!activeCredit?.credit_form_id) return [];
+
+    const productsForForm = getProductsForSelection({
+      credit_form_id: activeCredit.credit_form_id,
+    });
+    const ids = new Set(
+      productsForForm.map((item) => Number(item.organization_id))
+    );
+    return organizations.filter((item) => ids.has(Number(item.id)));
+  }, [activeCredit.credit_form_id, dbProducts, organizations]);
+
+  const availableProducts = useMemo(
+    () => {
+      if (!activeCredit?.credit_form_id || !activeCredit?.organization_id) {
+        return [];
+      }
+
+      return getProductsForSelection({
+        credit_form_id: activeCredit.credit_form_id,
+        organization_id: activeCredit.organization_id,
+      });
+    },
+    [
+      activeCredit.credit_form_id,
+      activeCredit.organization_id,
+      dbProducts,
+    ]
+  );
+
+  const canCalculate =
+    !!selectedProduct && Number(activeCredit.amount) > 0 && Number(activeCredit.term_months) > 0;
 
   const monthlyPayment = useMemo(() => {
     if (!canCalculate) return 0;
 
     const principal = Number(activeCredit.amount);
     const months = Number(activeCredit.term_months);
-    const annualRate = selectedProduct.defaultRate;
+    const annualRate = Number(selectedProduct.default_interest || 0);
+
+    if (!months) return 0;
+    if (!annualRate) return Math.round(principal / months);
+
     const monthlyRate = annualRate / 100 / 12;
 
     return Math.round(
       (principal * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months))
     );
-  }, [canCalculate, activeCredit.amount, activeCredit.term_months, selectedProduct.defaultRate]);
+  }, [
+    canCalculate,
+    activeCredit.amount,
+    activeCredit.term_months,
+    selectedProduct?.default_interest,
+  ]);
 
   function clearError(field) {
     setErrors((prev) => {
@@ -88,38 +365,49 @@ export default function ApplicationForm() {
     }
   }
 
-  function handleCreditChange(field, value) {
+  function updateActiveCredit(updates) {
     setCreditData((prev) => ({
       ...prev,
       [customerType]: {
         ...prev[customerType],
-        [field]: value,
+        ...updates,
       },
     }));
+  }
 
-    clearError(field);
+  function handleOrganizationChange(value) {
+    updateActiveCredit({
+      organization_id: value,
+      product_id: "",
+      amount: 0,
+      term_months: 0,
+    });
+    clearError("organization_id");
+    clearError("bank");
     setNotice({ type: "", text: "" });
   }
 
-  function handleCreditTypeChange(value) {
-    const product = products[customerType][value];
+  function handleProductChange(value) {
+    const product = dbProducts.find((item) => String(item.id) === String(value));
 
-    setCreditData((prev) => ({
-      ...prev,
-      [customerType]: {
-        ...prev[customerType],
-        credit_type: value,
-        amount: product.minAmount,
-        term_months: product.minTerm,
-      },
-    }));
+    updateActiveCredit({
+      product_id: value,
+      amount: product ? Number(product.min_amount || 0) : 0,
+      term_months: product ? Number(product.min_term_months || 0) : 0,
+    });
+    clearError("product_id");
+    setNotice({ type: "", text: "" });
+  }
 
-    clearError("credit_type");
+  function handleCreditValueChange(field, value) {
+    updateActiveCredit({ [field]: value });
+    clearError(field);
     setNotice({ type: "", text: "" });
   }
 
   function changeCustomerType(type) {
     setCustomerType(type);
+    setStep(1);
     setErrors({});
     setNotice({ type: "", text: "" });
   }
@@ -127,8 +415,8 @@ export default function ApplicationForm() {
   function goNext() {
     const nextErrors = {};
 
-    if (!activeCredit.credit_type) nextErrors.credit_type = "Kredit növünü seçin.";
-    if (!activeCredit.bank) nextErrors.bank = "Bank seçin.";
+    if (!activeCredit.organization_id) nextErrors.bank = "Bank seçin.";
+    if (!activeCredit.product_id || !selectedProduct) nextErrors.product_id = "Məhsul seçin.";
 
     setErrors(nextErrors);
 
@@ -172,9 +460,9 @@ export default function ApplicationForm() {
     clearError("otp");
     setPhoneVerified(true);
     setNotice({
-  type: "",
-  text: "",
-});
+      type: "",
+      text: "",
+    });
   }
 
   async function handleSubmit(e) {
@@ -182,6 +470,7 @@ export default function ApplicationForm() {
 
     const nextErrors = {};
 
+    if (!activeCredit.product_id || !selectedProduct) nextErrors.product_id = "Məhsul seçin.";
     if (!form.full_name.trim()) nextErrors.full_name = "Ad soyad daxil edin.";
     if (!form.email.trim()) nextErrors.email = "Email daxil edin.";
     if (!form.monthly_income) nextErrors.monthly_income = "Aylıq gəliri daxil edin.";
@@ -214,7 +503,7 @@ export default function ApplicationForm() {
         .from("applications")
         .select("id, created_at")
         .eq("phone", fullPhone)
-        .eq("credit_type", activeCredit.credit_type)
+        .eq("product_id", Number(selectedProduct.id))
         .gte("created_at", thirtyDaysAgo.toISOString())
         .limit(1)
         .maybeSingle();
@@ -238,6 +527,7 @@ export default function ApplicationForm() {
 
       const { error } = await supabase.from("applications").insert([
         {
+          product_id: Number(selectedProduct.id),
           full_name: form.full_name.trim(),
           email: form.email.trim(),
           phone: fullPhone,
@@ -245,13 +535,12 @@ export default function ApplicationForm() {
           status: "new",
 
           customer_type: customerType,
-          credit_type: activeCredit.credit_type,
-          organization:
-            banks.find((bank) => bank.id === Number(activeCredit.bank))?.name || "",
-          selected_organization_id: Number(activeCredit.bank),
+          credit_type: selectedProductType?.name || selectedProduct.product_name || "",
+          organization: getOrganizationDisplayName(selectedOrganization),
+          selected_organization_id: Number(selectedProduct.organization_id),
 
           term_months: Number(activeCredit.term_months),
-          interest_rate: selectedProduct.defaultRate,
+          interest_rate: Number(selectedProduct.default_interest || 0),
           monthly_payment: monthlyPayment,
 
           monthly_income: Number(form.monthly_income),
@@ -289,6 +578,16 @@ export default function ApplicationForm() {
     }
   }
 
+  const noProductsForCurrentType =
+    !dataLoading &&
+    !dataError &&
+    availableOrganizations.length === 0;
+  const noProductsForSelectedBank =
+    !dataLoading &&
+    !dataError &&
+    !!activeCredit.organization_id &&
+    availableProducts.length === 0;
+
   return (
     <form onSubmit={handleSubmit} style={formBox}>
       <div>
@@ -302,6 +601,12 @@ export default function ApplicationForm() {
             : "Məlumatlarınızı daxil edin və telefonu SMS kodla təsdiqləyin."}
         </p>
       </div>
+
+      {dataError ? <div style={errorNotice}>{dataError}</div> : null}
+
+      {noProductsForCurrentType ? (
+        <div style={infoNotice}>Hazırda bu bölmə üzrə aktiv məhsul yoxdur.</div>
+      ) : null}
 
       {notice.text && (
         <div style={notice.type === "success" ? successNotice : errorNotice}>
@@ -329,109 +634,130 @@ export default function ApplicationForm() {
             </button>
           </div>
 
-          {customerType === "individual" && (
-            <>
-              <select
-                value={activeCredit.credit_type}
-                onChange={(e) => handleCreditTypeChange(e.target.value)}
-                style={getInputStyle(errors.credit_type)}
-              >
-                {Object.keys(activeProducts).map((product) => (
-                  <option key={product} value={product}>
-                    {product}
-                  </option>
-                ))}
-              </select>
-
-              {errors.credit_type && (
-                <div style={errorText}>{errors.credit_type}</div>
-              )}
-            </>
-          )}
-
           <select
-            value={activeCredit.bank}
-            onChange={(e) => handleCreditChange("bank", e.target.value)}
-            style={getInputStyle(errors.bank, !activeCredit.bank)}
+            value={activeCredit.organization_id}
+            onChange={(e) => handleOrganizationChange(e.target.value)}
+            style={getInputStyle(errors.bank, !activeCredit.organization_id)}
+            disabled={dataLoading || !availableOrganizations.length}
           >
-            <option value="" disabled>
-              Bank seçin — məcburi
-            </option>
-            {banks.map((bank) => (
-              <option key={bank.id} value={bank.id}>
-                {bank.name}
+            <option value="">Bank seçin — məcburi</option>
+            {availableOrganizations.map((org) => (
+              <option key={org.id} value={org.id}>
+                {getOrganizationDisplayName(org)}
               </option>
             ))}
           </select>
           {errors.bank && <div style={errorText}>{errors.bank}</div>}
 
-          <div style={sliderBox}>
-            <div style={sliderHeader}>
-              <span>Kredit məbləği</span>
-              <strong>{formatMoney(activeCredit.amount)} AZN</strong>
-            </div>
+          <select
+            value={activeCredit.product_id}
+            onChange={(e) => handleProductChange(e.target.value)}
+            style={getInputStyle(errors.product_id, !activeCredit.product_id)}
+            disabled={
+              dataLoading ||
+              !activeCredit.organization_id ||
+              !availableProducts.length
+            }
+          >
+            <option value="">
+              {activeCredit.organization_id ? "Məhsul seçin — məcburi" : "Əvvəl bank seçin"}
+            </option>
+            {availableProducts.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.product_name}
+              </option>
+            ))}
+          </select>
+          {errors.product_id && <div style={errorText}>{errors.product_id}</div>}
 
-            <input
-              type="range"
-              min={selectedProduct.minAmount}
-              max={selectedProduct.maxAmount}
-              step="100"
-              value={activeCredit.amount}
-              onChange={(e) =>
-                handleCreditChange("amount", Number(e.target.value))
-              }
-              style={{ width: "100%" }}
-            />
+          {noProductsForSelectedBank ? (
+            <div style={infoNotice}>Seçilmiş bank üzrə aktiv məhsul tapılmadı.</div>
+          ) : null}
 
-            <div style={rangeText}>
-              <span>{formatMoney(selectedProduct.minAmount)} AZN</span>
-              <span>{formatMoney(selectedProduct.maxAmount)} AZN</span>
-            </div>
-          </div>
+          {selectedProductType ? (
+            <div style={miniText}>Məhsul növü: {selectedProductType.name}</div>
+          ) : null}
 
-          <div style={sliderBox}>
-            <div style={sliderHeader}>
-              <span>Müddət</span>
-              <strong>{activeCredit.term_months} ay</strong>
-            </div>
+          {selectedProduct ? (
+            <>
+              <div style={sliderBox}>
+                <div style={sliderHeader}>
+                  <span>Kredit məbləği</span>
+                  <strong>{formatMoney(activeCredit.amount)} AZN</strong>
+                </div>
 
-            <input
-              type="range"
-              min={selectedProduct.minTerm}
-              max={selectedProduct.maxTerm}
-              step="1"
-              value={activeCredit.term_months}
-              onChange={(e) =>
-                handleCreditChange("term_months", Number(e.target.value))
-              }
-              style={{ width: "100%" }}
-            />
+                <input
+                  type="range"
+                  min={Number(selectedProduct.min_amount || 0)}
+                  max={Number(selectedProduct.max_amount || 0)}
+                  step="100"
+                  value={activeCredit.amount}
+                  onChange={(e) =>
+                    handleCreditValueChange("amount", Number(e.target.value))
+                  }
+                  style={{ width: "100%" }}
+                />
 
-            <div style={rangeText}>
-              <span>{selectedProduct.minTerm} ay</span>
-              <span>{selectedProduct.maxTerm} ay</span>
-            </div>
-          </div>
-
-          <div style={resultBox}>
-            {canCalculate ? (
-              <>
-                <div style={miniText}>Default faiz dərəcəsi</div>
-                <strong>{selectedProduct.defaultRate}%</strong>
-
-                <div style={{ height: "12px" }} />
-
-                <div style={miniText}>Təxmini aylıq ödəniş</div>
-                <div style={paymentText}>{formatMoney(monthlyPayment)} AZN</div>
-              </>
-            ) : (
-              <div style={{ color: "#047857", fontWeight: 900 }}>
-                Hesablama üçün bank seçin.
+                <div style={rangeText}>
+                  <span>{formatMoney(selectedProduct.min_amount)} AZN</span>
+                  <span>{formatMoney(selectedProduct.max_amount)} AZN</span>
+                </div>
               </div>
-            )}
-          </div>
 
-          <button type="button" onClick={goNext} style={submitBtn}>
+              <div style={sliderBox}>
+                <div style={sliderHeader}>
+                  <span>Müddət</span>
+                  <strong>{activeCredit.term_months} ay</strong>
+                </div>
+
+                <input
+                  type="range"
+                  min={Number(selectedProduct.min_term_months || 0)}
+                  max={Number(selectedProduct.max_term_months || 0)}
+                  step="1"
+                  value={activeCredit.term_months}
+                  onChange={(e) =>
+                    handleCreditValueChange("term_months", Number(e.target.value))
+                  }
+                  style={{ width: "100%" }}
+                />
+
+                <div style={rangeText}>
+                  <span>{selectedProduct.min_term_months} ay</span>
+                  <span>{selectedProduct.max_term_months} ay</span>
+                </div>
+              </div>
+
+              <div style={resultBox}>
+                {canCalculate ? (
+                  <>
+                    <div style={miniText}>Default faiz dərəcəsi</div>
+                    <strong>{Number(selectedProduct.default_interest || 0)}%</strong>
+
+                    <div style={{ height: "12px" }} />
+
+                    <div style={miniText}>Təxmini aylıq ödəniş</div>
+                    <div style={paymentText}>{formatMoney(monthlyPayment)} AZN</div>
+                  </>
+                ) : (
+                  <div style={{ color: "#047857", fontWeight: 900 }}>
+                    Hesablama üçün məhsul seçin.
+                  </div>
+                )}
+              </div>
+            </>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={goNext}
+            style={{
+              ...submitBtn,
+              opacity: selectedProduct ? 1 : 0.5,
+              cursor: selectedProduct ? "pointer" : "not-allowed",
+            }}
+            disabled={!selectedProduct || dataLoading}
+          >
             Davam et
           </button>
         </>
@@ -703,7 +1029,7 @@ const input = {
   border: "1px solid #cbd5e1",
   borderRadius: "14px",
   fontSize: "15px",
-    boxSizing: "border-box",
+  boxSizing: "border-box",
   outline: "none",
   background: "#ffffff",
 };
@@ -837,6 +1163,16 @@ const successNotice = {
   background: "#ecfdf5",
   border: "1px solid #a7f3d0",
   color: "#047857",
+  borderRadius: "14px",
+  padding: "12px 14px",
+  fontSize: "13px",
+  fontWeight: 800,
+};
+
+const infoNotice = {
+  background: "#f8fafc",
+  border: "1px solid #cbd5e1",
+  color: "#475569",
   borderRadius: "14px",
   padding: "12px 14px",
   fontSize: "13px",

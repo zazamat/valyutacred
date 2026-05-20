@@ -235,8 +235,8 @@ export default function OrganizationsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const toggleTypeStatus = async (item) => {
-    const nextStatus = item.status === "active" ? "inactive" : "active";
+  const updateTypeStatus = async (item, nextStatus) => {
+    if (!nextStatus || nextStatus === item.status) return;
 
     const { error } = await supabase
       .from("organization_types")
@@ -339,8 +339,8 @@ export default function OrganizationsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const toggleOrgStatus = async (item) => {
-    const nextStatus = getNextValue(ORGANIZATION_STATUSES, item.status);
+  const updateOrgStatus = async (item, nextStatus) => {
+    if (!nextStatus || nextStatus === item.status) return;
 
     const { error } = await supabase
       .from("organizations")
@@ -356,8 +356,8 @@ export default function OrganizationsPage() {
     loadData();
   };
 
-  const toggleApprovalStatus = async (item) => {
-    const nextStatus = getNextValue(APPROVAL_STATUSES, item.approval_status);
+  const updateApprovalStatus = async (item, nextStatus) => {
+    if (!nextStatus || nextStatus === item.approval_status) return;
 
     const { error } = await supabase
       .from("organizations")
@@ -497,13 +497,18 @@ export default function OrganizationsPage() {
                   >
                     Edit et
                   </button>
-                  <button
-                    type="button"
-                    style={styles.secondaryButton}
-                    onClick={() => toggleTypeStatus(item)}
+                  <select
+                    value={item.status || "active"}
+                    onChange={(e) => updateTypeStatus(item, e.target.value)}
+                    style={styles.statusSelect}
+                    aria-label="Organization type status"
                   >
-                    Status dəyiş
-                  </button>
+                    {ORGANIZATION_TYPE_STATUSES.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     style={styles.deleteButton}
@@ -799,20 +804,30 @@ export default function OrganizationsPage() {
                 >
                   Edit et
                 </button>
-                <button
-                  type="button"
-                  style={styles.secondaryButton}
-                  onClick={() => toggleOrgStatus(org)}
+                <select
+                  value={org.status || "draft"}
+                  onChange={(e) => updateOrgStatus(org, e.target.value)}
+                  style={styles.statusSelect}
+                  aria-label="Organization status"
                 >
-                  Status dəyiş
-                </button>
-                <button
-                  type="button"
-                  style={styles.secondaryButton}
-                  onClick={() => toggleApprovalStatus(org)}
+                  {ORGANIZATION_STATUSES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={org.approval_status || "pending"}
+                  onChange={(e) => updateApprovalStatus(org, e.target.value)}
+                  style={styles.statusSelect}
+                  aria-label="Approval status"
                 >
-                  Approval dəyiş
-                </button>
+                  {APPROVAL_STATUSES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   style={styles.deleteButton}
@@ -984,6 +999,19 @@ const styles = {
     fontSize: "14px",
     fontWeight: 700,
     cursor: "pointer",
+  },
+  statusSelect: {
+    minHeight: "42px",
+    minWidth: "150px",
+    background: "#ffffff",
+    color: "#0f172a",
+    border: "1px solid #cbd5e1",
+    borderRadius: "14px",
+    padding: "0 12px",
+    fontSize: "14px",
+    fontWeight: 700,
+    cursor: "pointer",
+    outline: "none",
   },
   deleteButton: {
     background: "#ffffff",

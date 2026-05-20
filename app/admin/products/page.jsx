@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
-const PRODUCT_TYPE_STATUSES = [
+const CREDIT_FORM_STATUSES = [
   { value: "active", label: "Aktiv" },
   { value: "inactive", label: "Deaktiv" },
 ];
@@ -114,7 +114,7 @@ const getBadgeStyle = (value) => {
   };
 };
 
-const emptyTypeForm = {
+const emptyCreditForm = {
   name: "",
   slug: "",
   status: "active",
@@ -124,7 +124,6 @@ const emptyProductForm = {
   credit_form_id: "",
   organization_type_id: "",
   organization_id: "",
-  product_type_id: "",
   product_name: "",
   currency: "AZN",
   min_amount: "",
@@ -146,22 +145,21 @@ export default function ProductsPage() {
   const [creditForms, setCreditForms] = useState([]);
   const [organizationTypes, setOrganizationTypes] = useState([]);
   const [organizations, setOrganizations] = useState([]);
-  const [productTypes, setProductTypes] = useState([]);
   const [products, setProducts] = useState([]);
   const [requirementTypes, setRequirementTypes] = useState([]);
   const [productRequirements, setProductRequirements] = useState([]);
 
-  const [typeForm, setTypeForm] = useState(emptyTypeForm);
+  const [creditFormEditor, setCreditFormEditor] = useState(emptyCreditForm);
   const [productForm, setProductForm] = useState(emptyProductForm);
   const [requirementValues, setRequirementValues] = useState({});
 
-  const [editingTypeId, setEditingTypeId] = useState(null);
+  const [editingCreditFormId, setEditingCreditFormId] = useState(null);
   const [editingProductId, setEditingProductId] = useState(null);
-  const [typeSlugTouched, setTypeSlugTouched] = useState(false);
+  const [creditFormSlugTouched, setCreditFormSlugTouched] = useState(false);
   const [productNameTouched, setProductNameTouched] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [savingType, setSavingType] = useState(false);
+  const [savingCreditForm, setSavingCreditForm] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -188,14 +186,6 @@ export default function ProductsPage() {
     });
     return map;
   }, [creditForms]);
-
-  const productTypeMap = useMemo(() => {
-    const map = {};
-    productTypes.forEach((item) => {
-      map[item.id] = item;
-    });
-    return map;
-  }, [productTypes]);
 
   const requirementsByProductId = useMemo(() => {
     const map = {};
@@ -235,7 +225,6 @@ export default function ProductsPage() {
       formsRes,
       orgTypesRes,
       orgsRes,
-      productTypesRes,
       productsRes,
       requirementTypesRes,
       productRequirementsRes,
@@ -243,7 +232,6 @@ export default function ProductsPage() {
       supabase.from("credit_forms").select("*").order("id", { ascending: true }),
       supabase.from("organization_types").select("*").order("id", { ascending: true }),
       supabase.from("organizations").select("*").order("id", { ascending: true }),
-      supabase.from("product_types").select("*").order("id", { ascending: true }),
       supabase.from("products").select("*").order("id", { ascending: false }),
       supabase
         .from("requirement_types")
@@ -265,10 +253,6 @@ export default function ProductsPage() {
     if (orgsRes.error) errors.push("Təşkilatlar yüklənmədi: " + orgsRes.error.message);
     else setOrganizations(orgsRes.data || []);
 
-    if (productTypesRes.error)
-      errors.push("Məhsul növləri yüklənmədi: " + productTypesRes.error.message);
-    else setProductTypes(productTypesRes.data || []);
-
     if (productsRes.error) errors.push("Məhsullar yüklənmədi: " + productsRes.error.message);
     else setProducts(productsRes.data || []);
 
@@ -287,10 +271,10 @@ export default function ProductsPage() {
     setLoading(false);
   };
 
-  const resetTypeForm = () => {
-    setTypeForm(emptyTypeForm);
-    setEditingTypeId(null);
-    setTypeSlugTouched(false);
+  const resetCreditFormEditor = () => {
+    setCreditFormEditor(emptyCreditForm);
+    setEditingCreditFormId(null);
+    setCreditFormSlugTouched(false);
   };
 
   const resetProductForm = () => {
@@ -300,32 +284,19 @@ export default function ProductsPage() {
     setProductNameTouched(false);
   };
 
-  const handleTypeNameChange = (value) => {
-    setTypeForm((prev) => ({
+  const handleCreditFormNameChange = (value) => {
+    setCreditFormEditor((prev) => ({
       ...prev,
       name: value,
-      slug: typeSlugTouched ? prev.slug : slugify(value),
+      slug: creditFormSlugTouched ? prev.slug : slugify(value),
     }));
   };
 
-  const handleTypeSlugChange = (value) => {
-    setTypeSlugTouched(true);
-    setTypeForm((prev) => ({
+  const handleCreditFormSlugChange = (value) => {
+    setCreditFormSlugTouched(true);
+    setCreditFormEditor((prev) => ({
       ...prev,
       slug: slugify(value),
-    }));
-  };
-
-  const handleProductTypeSelection = (value) => {
-    const selectedType = productTypes.find((item) => String(item.id) === String(value));
-
-    setProductForm((prev) => ({
-      ...prev,
-      product_type_id: value,
-      product_name:
-        productNameTouched || editingProductId
-          ? prev.product_name
-          : selectedType?.name || "",
     }));
   };
 
@@ -395,88 +366,88 @@ export default function ProductsPage() {
       .filter(Boolean);
   };
 
-  const saveProductType = async (e) => {
+  const saveCreditForm = async (e) => {
     e.preventDefault();
 
-    if (!typeForm.name.trim()) {
-      setMessage("Məhsul növü adı boş ola bilməz.");
+    if (!creditFormEditor.name.trim()) {
+      setMessage("Kredit forması adı boş ola bilməz.");
       return;
     }
 
-    if (!typeForm.slug.trim()) {
+    if (!creditFormEditor.slug.trim()) {
       setMessage("Slug boş ola bilməz.");
       return;
     }
 
-    setSavingType(true);
+    setSavingCreditForm(true);
     setMessage("");
 
     const payload = {
-      name: typeForm.name.trim(),
-      slug: slugify(typeForm.slug),
-      status: typeForm.status,
+      name: creditFormEditor.name.trim(),
+      slug: slugify(creditFormEditor.slug),
+      status: creditFormEditor.status,
     };
 
-    const response = editingTypeId
-      ? await supabase.from("product_types").update(payload).eq("id", editingTypeId)
-      : await supabase.from("product_types").insert([payload]);
+    const response = editingCreditFormId
+      ? await supabase.from("credit_forms").update(payload).eq("id", editingCreditFormId)
+      : await supabase.from("credit_forms").insert([payload]);
 
-    setSavingType(false);
+    setSavingCreditForm(false);
 
     if (response.error) {
-      setMessage("Məhsul növü yadda saxlanmadı: " + response.error.message);
+      setMessage("Kredit forması yadda saxlanmadı: " + response.error.message);
       return;
     }
 
-    setMessage(editingTypeId ? "Məhsul növü yeniləndi." : "Məhsul növü əlavə olundu.");
-    resetTypeForm();
+    setMessage(editingCreditFormId ? "Kredit forması yeniləndi." : "Kredit forması əlavə olundu.");
+    resetCreditFormEditor();
     loadData();
   };
 
-  const startEditProductType = (item) => {
-    setEditingTypeId(item.id);
-    setTypeForm({
+  const startEditCreditForm = (item) => {
+    setEditingCreditFormId(item.id);
+    setCreditFormEditor({
       name: item.name || "",
       slug: item.slug || "",
       status: item.status || "active",
     });
-    setTypeSlugTouched(true);
+    setCreditFormSlugTouched(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const toggleProductTypeStatus = async (item) => {
-    const nextStatus = item.status === "active" ? "inactive" : "active";
+  const updateCreditFormStatus = async (item, nextStatus) => {
+    if (!nextStatus || nextStatus === item.status) return;
 
     const { error } = await supabase
-      .from("product_types")
+      .from("credit_forms")
       .update({ status: nextStatus })
       .eq("id", item.id);
 
     if (error) {
-      setMessage("Məhsul növü statusu dəyişmədi: " + error.message);
+      setMessage("Kredit forması statusu dəyişmədi: " + error.message);
       return;
     }
 
-    setMessage("Məhsul növü statusu yeniləndi.");
+    setMessage("Kredit forması statusu yeniləndi.");
     loadData();
   };
 
-  const deleteProductType = async (item) => {
+  const deleteCreditForm = async (item) => {
     const confirmed = window.confirm(
-      `"${item.name}" məhsul növünü silmək istədiyinizə əminsiniz?`
+      `"${item.name}" kredit formasını silmək istədiyinizə əminsiniz?`
     );
     if (!confirmed) return;
 
-    const { error } = await supabase.from("product_types").delete().eq("id", item.id);
+    const { error } = await supabase.from("credit_forms").delete().eq("id", item.id);
 
     if (error) {
-      setMessage("Məhsul növü silinmədi: " + error.message);
+      setMessage("Kredit forması silinmədi: " + error.message);
       return;
     }
 
-    if (editingTypeId === item.id) resetTypeForm();
+    if (editingCreditFormId === item.id) resetCreditFormEditor();
 
-    setMessage("Məhsul növü silindi.");
+    setMessage("Kredit forması silindi.");
     loadData();
   };
 
@@ -498,16 +469,7 @@ export default function ProductsPage() {
       return;
     }
 
-    if (!productForm.product_type_id) {
-      setMessage("Məhsul növü seçilməlidir.");
-      return;
-    }
-
-    const selectedProductType = productTypes.find(
-      (item) => String(item.id) === String(productForm.product_type_id)
-    );
-
-    const finalProductName = productForm.product_name.trim() || selectedProductType?.name || "";
+    const finalProductName = productForm.product_name.trim();
 
     if (!finalProductName) {
       setMessage("Məhsul adı boş ola bilməz.");
@@ -521,7 +483,7 @@ export default function ProductsPage() {
       credit_form_id: Number(productForm.credit_form_id),
       organization_type_id: Number(productForm.organization_type_id),
       organization_id: Number(productForm.organization_id),
-      product_type_id: Number(productForm.product_type_id),
+      product_type_id: null,
       product_name: finalProductName,
       currency: productForm.currency || "AZN",
       min_amount: Number(productForm.min_amount || 0),
@@ -611,7 +573,6 @@ export default function ProductsPage() {
       credit_form_id: item.credit_form_id ? String(item.credit_form_id) : "",
       organization_type_id: item.organization_type_id ? String(item.organization_type_id) : "",
       organization_id: item.organization_id ? String(item.organization_id) : "",
-      product_type_id: item.product_type_id ? String(item.product_type_id) : "",
       product_name: item.product_name || "",
       currency: item.currency || "AZN",
       min_amount: item.min_amount ?? "",
@@ -633,8 +594,8 @@ export default function ProductsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const toggleProductStatus = async (item) => {
-    const nextStatus = getNextValue(PRODUCT_STATUSES, item.status);
+  const updateProductStatus = async (item, nextStatus) => {
+    if (!nextStatus || nextStatus === item.status) return;
 
     const { error } = await supabase
       .from("products")
@@ -653,8 +614,8 @@ export default function ProductsPage() {
     loadData();
   };
 
-  const toggleProductApproval = async (item) => {
-    const nextStatus = getNextValue(APPROVAL_STATUSES, item.approval_status);
+  const updateProductApproval = async (item, nextStatus) => {
+    if (!nextStatus || nextStatus === item.approval_status) return;
 
     const { error } = await supabase
       .from("products")
@@ -792,7 +753,7 @@ export default function ProductsPage() {
         <div>
           <h1 style={styles.title}>Məhsullar</h1>
           <p style={styles.subtitle}>
-            Kredit forması, təşkilat bağlılığı, məhsul növləri və dinamik kredit şərtlərini buradan idarə et.
+            Kredit forması, təşkilat bağlılığı, məhsullar və dinamik kredit şərtlərini buradan idarə et.
           </p>
         </div>
       </div>
@@ -803,22 +764,22 @@ export default function ProductsPage() {
         <section style={styles.panel}>
           <div style={styles.panelHeader}>
             <h2 style={styles.panelTitle}>
-              {editingTypeId ? "Məhsul növünü redaktə et" : "Məhsul növü əlavə et"}
+              {editingCreditFormId ? "Kredit formasını redaktə et" : "Kredit forması əlavə et"}
             </h2>
             <p style={styles.panelDesc}>
-              “Nağd kredit”, “Kart krediti”, “İpoteka” kimi ümumi məhsul növlərini bir dəfə yarat.
+              “Fərdi kredit”, “Biznes krediti” kimi əsas kredit formalarını buradan idarə et.
             </p>
           </div>
 
-          <form onSubmit={saveProductType}>
+          <form onSubmit={saveCreditForm}>
             <div style={styles.formGrid}>
               <div>
-                <label style={styles.label}>Məhsul növü adı</label>
+                <label style={styles.label}>Kredit forması adı</label>
                 <input
                   style={styles.input}
-                  placeholder="Məsələn: Nağd kredit"
-                  value={typeForm.name}
-                  onChange={(e) => handleTypeNameChange(e.target.value)}
+                  placeholder="Məsələn: Fərdi kredit"
+                  value={creditFormEditor.name}
+                  onChange={(e) => handleCreditFormNameChange(e.target.value)}
                 />
               </div>
 
@@ -826,9 +787,9 @@ export default function ProductsPage() {
                 <label style={styles.label}>Slug / sistem açarı</label>
                 <input
                   style={styles.input}
-                  placeholder="Meselen: nagd-kredit"
-                  value={typeForm.slug}
-                  onChange={(e) => handleTypeSlugChange(e.target.value)}
+                  placeholder="Meselen: ferdi-kredit"
+                  value={creditFormEditor.slug}
+                  onChange={(e) => handleCreditFormSlugChange(e.target.value)}
                 />
               </div>
             </div>
@@ -837,12 +798,12 @@ export default function ProductsPage() {
               <label style={styles.label}>Status</label>
               <select
                 style={styles.select}
-                value={typeForm.status}
+                value={creditFormEditor.status}
                 onChange={(e) =>
-                  setTypeForm((prev) => ({ ...prev, status: e.target.value }))
+                  setCreditFormEditor((prev) => ({ ...prev, status: e.target.value }))
                 }
               >
-                {PRODUCT_TYPE_STATUSES.map((item) => (
+                {CREDIT_FORM_STATUSES.map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
@@ -851,26 +812,26 @@ export default function ProductsPage() {
             </div>
 
             <div style={styles.actionRow}>
-              <button type="submit" style={styles.primaryButton} disabled={savingType}>
-                {savingType
+              <button type="submit" style={styles.primaryButton} disabled={savingCreditForm}>
+                {savingCreditForm
                   ? "Yadda saxlanır..."
-                  : editingTypeId
-                  ? "Məhsul növünü yenilə"
-                  : "Məhsul növü əlavə et"}
+                  : editingCreditFormId
+                  ? "Kredit formasını yenilə"
+                  : "Kredit forması əlavə et"}
               </button>
 
-              {editingTypeId ? (
-                <button type="button" style={styles.secondaryButton} onClick={resetTypeForm}>
+              {editingCreditFormId ? (
+                <button type="button" style={styles.secondaryButton} onClick={resetCreditFormEditor}>
                   Ləğv et
                 </button>
               ) : null}
             </div>
           </form>
 
-          <div style={styles.sectionTitle}>Mövcud məhsul növləri</div>
+          <div style={styles.sectionTitle}>Mövcud kredit formaları</div>
 
           <div style={styles.stack}>
-            {productTypes.map((item) => (
+            {creditForms.map((item) => (
               <div key={item.id} style={styles.typeCard}>
                 <div style={styles.cardTop}>
                   <div>
@@ -879,7 +840,7 @@ export default function ProductsPage() {
                   </div>
 
                   <span style={getBadgeStyle(item.status)}>
-                    {getLabel(PRODUCT_TYPE_STATUSES, item.status)}
+                    {getLabel(CREDIT_FORM_STATUSES, item.status)}
                   </span>
                 </div>
 
@@ -887,21 +848,26 @@ export default function ProductsPage() {
                   <button
                     type="button"
                     style={styles.secondaryButton}
-                    onClick={() => startEditProductType(item)}
+                    onClick={() => startEditCreditForm(item)}
                   >
                     Edit et
                   </button>
-                  <button
-                    type="button"
-                    style={styles.secondaryButton}
-                    onClick={() => toggleProductTypeStatus(item)}
+                  <select
+                    value={item.status || "active"}
+                    onChange={(e) => updateCreditFormStatus(item, e.target.value)}
+                    style={styles.statusSelect}
+                    aria-label="Credit form status"
                   >
-                    Status dəyiş
-                  </button>
+                    {CREDIT_FORM_STATUSES.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     style={styles.deleteButton}
-                    onClick={() => deleteProductType(item)}
+                    onClick={() => deleteCreditForm(item)}
                   >
                     Sil
                   </button>
@@ -909,8 +875,8 @@ export default function ProductsPage() {
               </div>
             ))}
 
-            {!productTypes.length && !loading ? (
-              <div style={styles.emptyBox}>Hələ məhsul növü yoxdur.</div>
+            {!creditForms.length && !loading ? (
+              <div style={styles.emptyBox}>Hələ kredit forması yoxdur.</div>
             ) : null}
           </div>
         </section>
@@ -921,7 +887,7 @@ export default function ProductsPage() {
               {editingProductId ? "Məhsulu redaktə et" : "Məhsul əlavə et"}
             </h2>
             <p style={styles.panelDesc}>
-              Kredit forması → təşkilat növü → təşkilat → məhsul növü zəncirinə uyğun məhsul yarat.
+              Kredit forması → təşkilat növü → təşkilat → məhsul zəncirinə uyğun məhsul yarat.
             </p>
           </div>
 
@@ -993,29 +959,11 @@ export default function ProductsPage() {
                 </select>
               </div>
 
-              <div>
-                <label style={styles.label}>Məhsul növü</label>
-                <select
-                  style={styles.select}
-                  value={productForm.product_type_id}
-                  onChange={(e) => handleProductTypeSelection(e.target.value)}
-                >
-                  <option value="">Seçin</option>
-                  {productTypes
-                    .filter((item) => item.status === "active")
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
               <div style={styles.fullWidth}>
                 <label style={styles.label}>Məhsul adı</label>
                 <input
                   style={styles.input}
-                  placeholder="Boş qoysan, seçilən məhsul növünün adı götürüləcək"
+                  placeholder="Məsələn: İstehlak krediti"
                   value={productForm.product_name}
                   onChange={(e) => {
                     setProductNameTouched(true);
@@ -1327,8 +1275,7 @@ export default function ProductsPage() {
                   <div style={styles.cardSub}>
                     {creditFormMap[item.credit_form_id]?.name || "-"} •{" "}
                     {typeMap[item.organization_type_id]?.name || "-"} •{" "}
-                    {orgMap[item.organization_id]?.name || "-"} •{" "}
-                    {productTypeMap[item.product_type_id]?.name || "-"}
+                    {orgMap[item.organization_id]?.name || "-"}
                   </div>
                 </div>
 
@@ -1382,20 +1329,30 @@ export default function ProductsPage() {
                 >
                   Edit et
                 </button>
-                <button
-                  type="button"
-                  style={styles.secondaryButton}
-                  onClick={() => toggleProductStatus(item)}
+                <select
+                  value={item.status || "draft"}
+                  onChange={(e) => updateProductStatus(item, e.target.value)}
+                  style={styles.statusSelect}
+                  aria-label="Product status"
                 >
-                  Status dəyiş
-                </button>
-                <button
-                  type="button"
-                  style={styles.secondaryButton}
-                  onClick={() => toggleProductApproval(item)}
+                  {PRODUCT_STATUSES.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={item.approval_status || "pending"}
+                  onChange={(e) => updateProductApproval(item, e.target.value)}
+                  style={styles.statusSelect}
+                  aria-label="Approval status"
                 >
-                  Approval dəyiş
-                </button>
+                  {APPROVAL_STATUSES.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   style={styles.deleteButton}
@@ -1595,6 +1552,19 @@ const styles = {
     fontSize: "14px",
     fontWeight: 700,
     cursor: "pointer",
+  },
+  statusSelect: {
+    minHeight: "42px",
+    minWidth: "150px",
+    background: "#ffffff",
+    color: "#0f172a",
+    border: "1px solid #cbd5e1",
+    borderRadius: "14px",
+    padding: "0 12px",
+    fontSize: "14px",
+    fontWeight: 700,
+    cursor: "pointer",
+    outline: "none",
   },
   deleteButton: {
     background: "#ffffff",

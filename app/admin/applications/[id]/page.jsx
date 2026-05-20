@@ -249,14 +249,34 @@ if (!flagReason.trim()) {
 setFlagLoading(true);
 setFlagMessage("");
 
-let currentAdmin = null;
-
 try {
-  const auth = localStorage.getItem("valyutacred_auth");
-  currentAdmin = auth ? JSON.parse(auth) : null;
-} catch (error) {
-  currentAdmin = null;
-}
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !userData?.user) {
+    setFlagMessage("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun.");
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, role, status")
+    .eq("id", userData.user.id)
+    .single();
+
+  if (profileError || !profile) {
+    setFlagMessage("Admin profili tapılmadı. Problemli qeyd yaradılmadı.");
+    return;
+  }
+
+  if (profile.status !== "active") {
+    setFlagMessage("Admin hesabı aktiv deyil. Problemli qeyd yaradılmadı.");
+    return;
+  }
+
+  if (!["super_admin", "admin"].includes(profile.role)) {
+    setFlagMessage("Bu əməliyyat üçün admin icazəsi lazımdır.");
+    return;
+  }
 
 const { data, error } = await supabase
       .from("customer_flags")
@@ -267,9 +287,9 @@ const { data, error } = await supabase
   email: application.email || "",
   customer_name: application.full_name || "",
   flagged_by_organization_id: application.selected_organization_id || null,
-  flagged_by_name: currentAdmin?.fullName || "Admin",
-  flagged_by_role: currentAdmin?.role || "admin",
-  flagged_by_email: currentAdmin?.email || "",
+  flagged_by_name: profile.full_name || profile.email || "Admin",
+  flagged_by_role: profile.role,
+  flagged_by_email: profile.email || "",
   reason: flagReason || null,
   status: "active",
 },
@@ -279,14 +299,17 @@ const { data, error } = await supabase
 
     if (error) {
       setFlagMessage("Problemli müştəri qeyd olunmadı: " + error.message);
-      setFlagLoading(false);
       return;
     }
 
     setCustomerFlags((prev) => [data, ...prev]);
     setFlagMessage("Müştəri problemli kimi qeyd edildi.");
     setFlagReason("");
-    setFlagLoading(false);
+} catch (error) {
+  setFlagMessage("Problemli qeyd yaradılarkən xəta baş verdi.");
+} finally {
+  setFlagLoading(false);
+}
   }
 async function updateFlagStatus(flagId, nextStatus) {
   if (!flagId) return;

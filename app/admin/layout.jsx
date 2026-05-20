@@ -3,8 +3,16 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../../lib/supabaseClient";
 
 const ADMIN_ROLES = ["super_admin", "admin"];
+
+function getRedirectByRole(role) {
+  if (role === "super_admin" || role === "admin") return "/admin";
+  if (role === "organization_user") return "/organization";
+  if (role === "customer") return "/customer";
+  return "/login";
+}
 
 const menuGroups = [
   {
@@ -53,28 +61,67 @@ export default function AdminLayout({ children }) {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    try {
-      const auth = localStorage.getItem("valyutacred_auth");
+    let isMounted = true;
 
-      if (!auth) {
-        router.replace("/login");
-        return;
-      }
+    async function checkAdminAccess() {
+      try {
+        const { data: userData, error: userError } =
+          await supabase.auth.getUser();
 
-      const parsed = JSON.parse(auth);
+        if (userError || !userData?.user) {
+          localStorage.removeItem("valyutacred_auth");
+          router.replace("/login");
+          return;
+        }
 
-      if (!parsed?.isLoggedIn || !ADMIN_ROLES.includes(parsed?.role)) {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, email, full_name, role, status, organization_id")
+          .eq("id", userData.user.id)
+          .single();
+
+        if (profileError || !profile) {
+          await supabase.auth.signOut();
+          localStorage.removeItem("valyutacred_auth");
+          router.replace("/login");
+          return;
+        }
+
+        if (profile.status !== "active") {
+          await supabase.auth.signOut();
+          localStorage.removeItem("valyutacred_auth");
+          router.replace("/login");
+          return;
+        }
+
+        if (!ADMIN_ROLES.includes(profile.role)) {
+          const redirectPath = getRedirectByRole(profile.role);
+
+          if (redirectPath === "/login") {
+            await supabase.auth.signOut();
+            localStorage.removeItem("valyutacred_auth");
+          }
+
+          router.replace(redirectPath);
+          return;
+        }
+
+        if (!isMounted) return;
+
+        setAdminUser(profile);
+        setIsCheckingAuth(false);
+      } catch (error) {
+        await supabase.auth.signOut();
         localStorage.removeItem("valyutacred_auth");
         router.replace("/login");
-        return;
       }
-
-      setAdminUser(parsed);
-      setIsCheckingAuth(false);
-    } catch (error) {
-      localStorage.removeItem("valyutacred_auth");
-      router.replace("/login");
     }
+
+    checkAdminAccess();
+
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
   useEffect(() => {
@@ -114,7 +161,8 @@ export default function AdminLayout({ children }) {
     return pathname.startsWith(href);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem("valyutacred_auth");
     router.replace("/login");
   };
@@ -128,6 +176,9 @@ export default function AdminLayout({ children }) {
   }
 
   const sidebarWidth = sidebarCollapsed ? 76 : 248;
+  const adminName = adminUser?.full_name || "Admin";
+  const adminEmail = adminUser?.email || "-";
+  const adminRole = adminUser?.role || "admin";
 
   return (
     <div style={styles.page}>
@@ -232,15 +283,12 @@ export default function AdminLayout({ children }) {
           >
             {!sidebarCollapsed || isMobile ? (
               <div style={styles.userText}>
-                <div style={styles.userName}>
-                  {adminUser?.fullName || "Admin"}
-                </div>
-                <div style={styles.userRole}>{adminUser?.role || "-"}</div>
+                <div style={styles.userName}>{adminName}</div>
+                <div style={styles.userEmail}>{adminEmail}</div>
+                <div style={styles.userRole}>{adminRole}</div>
               </div>
             ) : (
-              <div style={styles.userShort}>
-                {(adminUser?.fullName || "A").slice(0, 1)}
-              </div>
+              <div style={styles.userShort}>{adminName.slice(0, 1)}</div>
             )}
           </div>
 
@@ -283,7 +331,7 @@ export default function AdminLayout({ children }) {
           </div>
 
           <div style={styles.topbarRight}>
-            <div style={styles.roleBadge}>{adminUser?.role || "admin"}</div>
+            <div style={styles.roleBadge}>{adminRole}</div>
           </div>
         </header>
 
@@ -476,7 +524,7 @@ const styles = {
   },
 
   userInfo: {
-    minHeight: "44px",
+    minHeight: "58px",
     borderRadius: "12px",
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
@@ -494,6 +542,16 @@ const styles = {
     fontSize: "13px",
     fontWeight: 600,
     color: "#0f172a",
+    lineHeight: 1.25,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+
+  userEmail: {
+    fontSize: "11px",
+    color: "#64748b",
+    marginTop: "2px",
     lineHeight: 1.25,
     whiteSpace: "nowrap",
     overflow: "hidden",

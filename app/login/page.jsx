@@ -3,73 +3,84 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-const DEMO_USERS = [
-  {
-    email: "admin@valyutacred.az",
-    password: "Admin123!",
-    role: "super_admin",
-    fullName: "Sistem Admini",
-  },
-  {
-    email: "bank@valyutacred.az",
-    password: "Bank123!",
-    role: "bank_manager",
-    fullName: "Bank Meneceri",
-  },
-  {
-    email: "insurance@valyutacred.az",
-    password: "Insure123!",
-    role: "insurance_manager",
-    fullName: "Sığorta Meneceri",
-  },
-  {
-    email: "user@valyutacred.az",
-    password: "User123!",
-    role: "end_user",
-    fullName: "Adi İstifadəçi",
-  },
-];
+import { supabase } from "../../lib/supabaseClient";
 
 function getRedirectByRole(role) {
   if (role === "super_admin" || role === "admin") return "/admin";
-  if (role === "bank_manager") return "/cabinet/bank";
-  if (role === "insurance_manager") return "/cabinet/insurance";
-  return "/profile";
+  if (role === "organization_user") return "/organization";
+  if (role === "customer") return "/customer";
+  return null;
 }
 
 export default function LoginPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
 
-    const user = DEMO_USERS.find(
-      (item) =>
-        item.email.toLowerCase() === email.trim().toLowerCase() &&
-        item.password === password
-    );
+    const cleanEmail = email.trim().toLowerCase();
 
-    if (!user) {
-      setError("Email və ya şifrə yanlışdır.");
+    if (!cleanEmail || !password) {
+      setError("Email və şifrə daxil edilməlidir.");
       return;
     }
 
-    localStorage.setItem(
-      "valyutacred_auth",
-      JSON.stringify({
-        isLoggedIn: true,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-      })
-    );
+    setIsSubmitting(true);
 
-    router.push(getRedirectByRole(user.role));
+    try {
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+
+      if (authError || !authData?.user) {
+        setError("Email və ya şifrə yanlışdır.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name, role, status, organization_id")
+        .eq("id", authData.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        await supabase.auth.signOut();
+        setError("Bu hesab üçün profil tapılmadı. Administratorla əlaqə saxlayın.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (profile.status !== "active") {
+        await supabase.auth.signOut();
+        setError("Bu hesab aktiv deyil. Administratorla əlaqə saxlayın.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const redirectPath = getRedirectByRole(profile.role);
+
+      if (!redirectPath) {
+        await supabase.auth.signOut();
+        setError("Bu rol üçün giriş icazəsi yoxdur.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      localStorage.removeItem("valyutacred_auth");
+      router.push(redirectPath);
+    } catch (err) {
+      setError("Giriş zamanı xəta baş verdi. Zəhmət olmasa yenidən yoxlayın.");
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -116,6 +127,7 @@ export default function LoginPage() {
           <h1 style={{ margin: 0, fontSize: "34px", fontWeight: 800 }}>
             Hesaba daxil olun
           </h1>
+
           <p style={{ color: "#475569", lineHeight: 1.7, marginTop: "10px" }}>
             Rolunuza uyğun kabinetə keçmək üçün email və şifrə ilə daxil olun.
           </p>
@@ -133,11 +145,14 @@ export default function LoginPage() {
             >
               Email
             </label>
+
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="mail@example.com"
+              disabled={isSubmitting}
+              autoComplete="email"
               style={{
                 width: "100%",
                 padding: "14px 16px",
@@ -145,6 +160,7 @@ export default function LoginPage() {
                 borderRadius: "14px",
                 fontSize: "16px",
                 boxSizing: "border-box",
+                opacity: isSubmitting ? 0.75 : 1,
               }}
             />
           </div>
@@ -160,11 +176,14 @@ export default function LoginPage() {
             >
               Şifrə
             </label>
+
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Şifrənizi daxil edin"
+              disabled={isSubmitting}
+              autoComplete="current-password"
               style={{
                 width: "100%",
                 padding: "14px 16px",
@@ -172,6 +191,7 @@ export default function LoginPage() {
                 borderRadius: "14px",
                 fontSize: "16px",
                 boxSizing: "border-box",
+                opacity: isSubmitting ? 0.75 : 1,
               }}
             />
           </div>
@@ -208,19 +228,20 @@ export default function LoginPage() {
 
           <button
             type="submit"
+            disabled={isSubmitting}
             style={{
               width: "100%",
-              background: "#059669",
+              background: isSubmitting ? "#94a3b8" : "#059669",
               color: "#fff",
               border: "none",
               borderRadius: "14px",
               padding: "14px 16px",
               fontWeight: 700,
               fontSize: "16px",
-              cursor: "pointer",
+              cursor: isSubmitting ? "not-allowed" : "pointer",
             }}
           >
-            Daxil ol
+            {isSubmitting ? "Yoxlanılır..." : "Daxil ol"}
           </button>
         </form>
 
@@ -236,12 +257,12 @@ export default function LoginPage() {
           }}
         >
           <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: "8px" }}>
-            Demo girişlər:
+            Supabase Auth aktivdir
           </div>
-          <div>Admin: admin@valyutacred.az / Admin123!</div>
-          <div>Bank: bank@valyutacred.az / Bank123!</div>
-          <div>Sığorta: insurance@valyutacred.az / Insure123!</div>
-          <div>User: user@valyutacred.az / User123!</div>
+          <div>
+            Giriş üçün Supabase Authentication-da yaradılmış aktiv istifadəçi
+            hesabından istifadə edin.
+          </div>
         </div>
 
         <div style={{ marginTop: "18px", textAlign: "center", fontSize: "14px" }}>
