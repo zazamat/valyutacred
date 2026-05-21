@@ -10,6 +10,25 @@ import { ORGANIZATION_STATUSES, APPROVAL_STATUSES } from "../../../../lib/admin-
 const getLabel = (list, value) =>
   list.find((item) => item.value === value)?.label || value || "-";
 
+const MONETIZATION_MODEL_OPTIONS = [
+  { value: "lead_fee_only", label: "Yalnız lead haqqı" },
+  { value: "success_fee_only", label: "Yalnız uğurlu kredit komissiyası" },
+  { value: "hybrid", label: "Lead haqqı + uğurlu kredit komissiyası" },
+  { value: "free_test", label: "Pulsuz/test rejimi" },
+  { value: "disabled", label: "Deaktiv" },
+];
+
+const SUCCESS_FEE_TYPE_OPTIONS = [
+  { value: "percent", label: "Faizlə" },
+  { value: "fixed", label: "Sabit məbləğ" },
+];
+
+const MONETIZATION_STATUS_OPTIONS = [
+  { value: "active", label: "Aktiv" },
+  { value: "paused", label: "Dayandırılıb" },
+  { value: "disabled", label: "Deaktiv" },
+];
+
 const formatNumber = (value) => {
   if (value === null || value === undefined || value === "") return "0";
   return new Intl.NumberFormat("az-AZ").format(Number(value || 0));
@@ -176,6 +195,51 @@ export default function OrganizationProfilePage() {
             value={formatBoolean(organization.can_buy_open_market_leads)}
           />
           <Stat label="Kabinet aktivdir" value={formatBoolean(organization.cabinet_enabled)} />
+        </div>
+      </section>
+
+      <section style={styles.panel}>
+        <div style={styles.panelHeader}>
+          <h2 style={styles.panelTitle}>Monetizasiya ayarları</h2>
+        </div>
+
+        <div style={styles.statsGrid}>
+          <Stat
+            label="Monetizasiya modeli"
+            value={getLabel(MONETIZATION_MODEL_OPTIONS, organization.monetization_model)}
+          />
+          <Stat
+            label="Lead haqqı aktivdir"
+            value={formatBoolean(organization.lead_fee_enabled)}
+          />
+          <Stat
+            label="Lead haqqı məbləği"
+            value={`${formatNumber(organization.lead_fee_amount)} AZN`}
+          />
+          <Stat
+            label="Success fee aktivdir"
+            value={formatBoolean(organization.success_fee_enabled)}
+          />
+          <Stat
+            label="Success fee tipi"
+            value={getLabel(SUCCESS_FEE_TYPE_OPTIONS, organization.success_fee_type)}
+          />
+          <Stat
+            label="Success fee faizi"
+            value={`${formatNumber(organization.success_fee_percent)}%`}
+          />
+          <Stat
+            label="Success fee sabit məbləği"
+            value={`${formatNumber(organization.success_fee_fixed_amount)} AZN`}
+          />
+          <Stat
+            label="Attribution müddəti"
+            value={`${formatNumber(organization.attribution_window_days)} gün`}
+          />
+          <Stat
+            label="Monetizasiya statusu"
+            value={getLabel(MONETIZATION_STATUS_OPTIONS, organization.monetization_status)}
+          />
         </div>
       </section>
     </div>

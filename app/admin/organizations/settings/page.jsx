@@ -92,6 +92,25 @@ const emptyTypeForm = {
   status: "active",
 };
 
+const MONETIZATION_MODEL_OPTIONS = [
+  { value: "lead_fee_only", label: "Yalnız lead haqqı" },
+  { value: "success_fee_only", label: "Yalnız uğurlu kredit komissiyası" },
+  { value: "hybrid", label: "Lead haqqı + uğurlu kredit komissiyası" },
+  { value: "free_test", label: "Pulsuz/test rejimi" },
+  { value: "disabled", label: "Deaktiv" },
+];
+
+const SUCCESS_FEE_TYPE_OPTIONS = [
+  { value: "percent", label: "Faizlə" },
+  { value: "fixed", label: "Sabit məbləğ" },
+];
+
+const MONETIZATION_STATUS_OPTIONS = [
+  { value: "active", label: "Aktiv" },
+  { value: "paused", label: "Dayandırılıb" },
+  { value: "disabled", label: "Deaktiv" },
+];
+
 const emptyOrgForm = {
   name: "",
   organization_type_id: "",
@@ -106,6 +125,15 @@ const emptyOrgForm = {
   can_receive_leads: false,
   can_buy_open_market_leads: false,
   cabinet_enabled: false,
+  monetization_model: "lead_fee_only",
+  lead_fee_enabled: true,
+  lead_fee_amount: 0,
+  success_fee_enabled: false,
+  success_fee_type: "percent",
+  success_fee_percent: 0,
+  success_fee_fixed_amount: 0,
+  attribution_window_days: 90,
+  monetization_status: "active",
   status: "draft",
   approval_status: "pending",
   note: "",
@@ -212,6 +240,41 @@ export default function OrganizationSettingsPage() {
     }));
   };
 
+  const updateMonetizationModel = (model) => {
+    setOrgForm((prev) => {
+      const next = { ...prev, monetization_model: model };
+
+      if (model === "disabled") {
+        next.lead_fee_enabled = false;
+        next.success_fee_enabled = false;
+        next.monetization_status = "disabled";
+      }
+
+      if (model === "free_test") {
+        next.lead_fee_enabled = false;
+        next.success_fee_enabled = false;
+      }
+
+      if (model === "lead_fee_only") {
+        next.lead_fee_enabled = true;
+        next.success_fee_enabled = false;
+        if (prev.monetization_status === "disabled") next.monetization_status = "active";
+      }
+
+      if (model === "success_fee_only") {
+        next.lead_fee_enabled = false;
+        next.success_fee_enabled = true;
+        if (prev.monetization_status === "disabled") next.monetization_status = "active";
+      }
+
+      if (model === "hybrid" && prev.monetization_status === "disabled") {
+        next.monetization_status = "active";
+      }
+
+      return next;
+    });
+  };
+
   const saveType = async (e) => {
     e.preventDefault();
 
@@ -310,6 +373,44 @@ export default function OrganizationSettingsPage() {
       return;
     }
 
+    if (!orgForm.monetization_model) {
+      setMessage("Monetizasiya modeli boş ola bilməz.");
+      return;
+    }
+
+    if (!orgForm.monetization_status) {
+      setMessage("Monetizasiya statusu boş ola bilməz.");
+      return;
+    }
+
+    if (!!orgForm.lead_fee_enabled && Number(orgForm.lead_fee_amount || 0) < 0) {
+      setMessage("Lead haqqı məbləği 0-dan kiçik ola bilməz.");
+      return;
+    }
+
+    if (
+      !!orgForm.success_fee_enabled &&
+      orgForm.success_fee_type === "percent" &&
+      Number(orgForm.success_fee_percent || 0) < 0
+    ) {
+      setMessage("Success fee faizi 0-dan kiçik ola bilməz.");
+      return;
+    }
+
+    if (
+      !!orgForm.success_fee_enabled &&
+      orgForm.success_fee_type === "fixed" &&
+      Number(orgForm.success_fee_fixed_amount || 0) < 0
+    ) {
+      setMessage("Success fee sabit məbləği 0-dan kiçik ola bilməz.");
+      return;
+    }
+
+    if (Number(orgForm.attribution_window_days || 0) < 0) {
+      setMessage("Attribution müddəti 0-dan kiçik ola bilməz.");
+      return;
+    }
+
     setSavingOrg(true);
     setMessage("");
 
@@ -327,6 +428,15 @@ export default function OrganizationSettingsPage() {
       can_receive_leads: !!orgForm.can_receive_leads,
       can_buy_open_market_leads: !!orgForm.can_buy_open_market_leads,
       cabinet_enabled: !!orgForm.cabinet_enabled,
+      monetization_model: orgForm.monetization_model,
+      lead_fee_enabled: !!orgForm.lead_fee_enabled,
+      lead_fee_amount: Number(orgForm.lead_fee_amount || 0),
+      success_fee_enabled: !!orgForm.success_fee_enabled,
+      success_fee_type: orgForm.success_fee_type || "percent",
+      success_fee_percent: Number(orgForm.success_fee_percent || 0),
+      success_fee_fixed_amount: Number(orgForm.success_fee_fixed_amount || 0),
+      attribution_window_days: Number(orgForm.attribution_window_days || 0),
+      monetization_status: orgForm.monetization_status,
       status: orgForm.status,
       approval_status: orgForm.approval_status,
       note: orgForm.note.trim() || null,
@@ -364,6 +474,15 @@ export default function OrganizationSettingsPage() {
       can_receive_leads: !!item.can_receive_leads,
       can_buy_open_market_leads: !!item.can_buy_open_market_leads,
       cabinet_enabled: !!item.cabinet_enabled,
+      monetization_model: item.monetization_model || "lead_fee_only",
+      lead_fee_enabled: item.lead_fee_enabled ?? true,
+      lead_fee_amount: item.lead_fee_amount ?? 0,
+      success_fee_enabled: !!item.success_fee_enabled,
+      success_fee_type: item.success_fee_type || "percent",
+      success_fee_percent: item.success_fee_percent ?? 0,
+      success_fee_fixed_amount: item.success_fee_fixed_amount ?? 0,
+      attribution_window_days: item.attribution_window_days ?? 90,
+      monetization_status: item.monetization_status || "active",
       status: item.status || "draft",
       approval_status: item.approval_status || "pending",
       note: item.note || "",
@@ -423,6 +542,12 @@ export default function OrganizationSettingsPage() {
     setMessage("Təşkilat silindi.");
     loadData();
   };
+
+  const isMonetizationDisabled = orgForm.monetization_model === "disabled";
+  const isLeadFeeDisabled = isMonetizationDisabled || !orgForm.lead_fee_enabled;
+  const isSuccessFeeDisabled = isMonetizationDisabled || !orgForm.success_fee_enabled;
+  const isPercentFeeDisabled = isSuccessFeeDisabled || orgForm.success_fee_type !== "percent";
+  const isFixedFeeDisabled = isSuccessFeeDisabled || orgForm.success_fee_type !== "fixed";
 
   return (
     <div>
@@ -788,6 +913,179 @@ export default function OrganizationSettingsPage() {
               </label>
             </div>
 
+            <div style={styles.groupTitle}>Monetizasiya ayarları</div>
+
+            <div style={styles.formGrid}>
+              <div>
+                <label style={styles.label}>Monetizasiya modeli</label>
+                <select
+                  style={styles.select}
+                  value={orgForm.monetization_model}
+                  onChange={(e) => updateMonetizationModel(e.target.value)}
+                >
+                  {MONETIZATION_MODEL_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={styles.label}>Monetizasiya statusu</label>
+                <select
+                  style={styles.select}
+                  value={orgForm.monetization_status}
+                  onChange={(e) =>
+                    setOrgForm((prev) => ({
+                      ...prev,
+                      monetization_status: e.target.value,
+                    }))
+                  }
+                >
+                  {MONETIZATION_STATUS_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={styles.checkboxGrid}>
+              <label style={styles.checkboxCard}>
+                <input
+                  type="checkbox"
+                  checked={!!orgForm.lead_fee_enabled}
+                  disabled={isMonetizationDisabled}
+                  onChange={(e) =>
+                    setOrgForm((prev) => ({
+                      ...prev,
+                      lead_fee_enabled: e.target.checked,
+                    }))
+                  }
+                />
+                <span>Lead haqqı aktivdir</span>
+              </label>
+
+              <label style={styles.checkboxCard}>
+                <input
+                  type="checkbox"
+                  checked={!!orgForm.success_fee_enabled}
+                  disabled={isMonetizationDisabled}
+                  onChange={(e) =>
+                    setOrgForm((prev) => ({
+                      ...prev,
+                      success_fee_enabled: e.target.checked,
+                    }))
+                  }
+                />
+                <span>Success fee aktivdir</span>
+              </label>
+            </div>
+
+            <div style={styles.formGrid}>
+              <div>
+                <label style={styles.label}>Lead haqqı məbləği</label>
+                <input
+                  type="number"
+                  style={{
+                    ...styles.input,
+                    ...(isLeadFeeDisabled ? styles.disabledField : {}),
+                  }}
+                  value={orgForm.lead_fee_amount}
+                  disabled={isLeadFeeDisabled}
+                  onChange={(e) =>
+                    setOrgForm((prev) => ({
+                      ...prev,
+                      lead_fee_amount: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Success fee tipi</label>
+                <select
+                  style={{
+                    ...styles.select,
+                    ...(isSuccessFeeDisabled ? styles.disabledField : {}),
+                  }}
+                  value={orgForm.success_fee_type}
+                  disabled={isSuccessFeeDisabled}
+                  onChange={(e) =>
+                    setOrgForm((prev) => ({
+                      ...prev,
+                      success_fee_type: e.target.value,
+                    }))
+                  }
+                >
+                  {SUCCESS_FEE_TYPE_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={styles.label}>Success fee faizi</label>
+                <input
+                  type="number"
+                  style={{
+                    ...styles.input,
+                    ...(isPercentFeeDisabled ? styles.disabledField : {}),
+                  }}
+                  value={orgForm.success_fee_percent}
+                  disabled={isPercentFeeDisabled}
+                  onChange={(e) =>
+                    setOrgForm((prev) => ({
+                      ...prev,
+                      success_fee_percent: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Success fee sabit məbləği</label>
+                <input
+                  type="number"
+                  style={{
+                    ...styles.input,
+                    ...(isFixedFeeDisabled ? styles.disabledField : {}),
+                  }}
+                  value={orgForm.success_fee_fixed_amount}
+                  disabled={isFixedFeeDisabled}
+                  onChange={(e) =>
+                    setOrgForm((prev) => ({
+                      ...prev,
+                      success_fee_fixed_amount: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Attribution müddəti</label>
+                <input
+                  type="number"
+                  style={{
+                    ...styles.input,
+                    ...(isMonetizationDisabled ? styles.disabledField : {}),
+                  }}
+                  value={orgForm.attribution_window_days}
+                  disabled={isMonetizationDisabled}
+                  onChange={(e) =>
+                    setOrgForm((prev) => ({
+                      ...prev,
+                      attribution_window_days: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
             <div style={styles.singleField}>
               <label style={styles.label}>Qısa qeyd / təsvir</label>
               <textarea
@@ -888,6 +1186,25 @@ export default function OrganizationSettingsPage() {
                 <div style={styles.leadStatusItem}>
                   <span style={styles.leadStatusLabel}>Kabinet:</span>{" "}
                   {org.cabinet_enabled ? "Aktiv" : "Deaktiv"}
+                </div>
+              </div>
+
+              <div style={styles.leadStatusGrid}>
+                <div style={styles.leadStatusItem}>
+                  <span style={styles.leadStatusLabel}>Monetizasiya modeli:</span>{" "}
+                  {getLabel(MONETIZATION_MODEL_OPTIONS, org.monetization_model)}
+                </div>
+                <div style={styles.leadStatusItem}>
+                  <span style={styles.leadStatusLabel}>Lead haqqı:</span>{" "}
+                  {org.lead_fee_enabled ? `${org.lead_fee_amount || 0} AZN` : "Deaktiv"}
+                </div>
+                <div style={styles.leadStatusItem}>
+                  <span style={styles.leadStatusLabel}>Success fee:</span>{" "}
+                  {org.success_fee_enabled
+                    ? org.success_fee_type === "fixed"
+                      ? `${org.success_fee_fixed_amount || 0} AZN`
+                      : `${org.success_fee_percent || 0}%`
+                    : "Deaktiv"}
                 </div>
               </div>
 
@@ -1099,6 +1416,11 @@ const styles = {
     color: "#0f172a",
     outline: "none",
     resize: "vertical",
+  },
+  disabledField: {
+    background: "#f1f5f9",
+    color: "#94a3b8",
+    cursor: "not-allowed",
   },
   actionRow: {
     display: "flex",
