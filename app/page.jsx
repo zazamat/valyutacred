@@ -201,7 +201,7 @@ export default function HomePage() {
 
           <div>
             <strong style={footerTitle}>Əlaqə</strong>
-            <div>Email: info@valyutacred.az</div>
+            <div>Email: info@vabank.az</div>
             <div>Telefon: +994 50 000 00 00</div>
           </div>
 

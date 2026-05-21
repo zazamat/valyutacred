@@ -1,135 +1,182 @@
 "use client";
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
-import {
-  ORGANIZATION_TYPE_STATUSES,
-  ORGANIZATION_STATUSES,
-  APPROVAL_STATUSES,
-} from "../../../lib/admin-options";
+import { ORGANIZATION_STATUSES, APPROVAL_STATUSES } from "../../../lib/admin-options";
 
-const slugify = (text = "") =>
-  text
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/ə/g, "e")
-    .replace(/ü/g, "u")
-    .replace(/ö/g, "o")
-    .replace(/ğ/g, "g")
-    .replace(/ı/g, "i")
-    .replace(/ş/g, "s")
-    .replace(/ç/g, "c")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
+const COLUMN_STORAGE_KEY = "vabank_organizations_visible_columns";
+
+const TABLE_COLUMNS = [
+  { key: "rowNumber", label: "№", exportable: true },
+  { key: "name", label: "Təşkilat adı", exportable: true },
+  { key: "type", label: "Təşkilat növü", exportable: true },
+  { key: "contact", label: "Əlaqədar şəxs", exportable: true },
+  { key: "phone", label: "Telefon", exportable: true },
+  { key: "email", label: "Email", exportable: true },
+  { key: "region", label: "Region", exportable: true },
+  { key: "website", label: "Website", exportable: true },
+  { key: "balance", label: "Balans", exportable: true },
+  { key: "leadPrice", label: "Lead qiyməti", exportable: true },
+  { key: "status", label: "Status", exportable: true },
+  { key: "approval", label: "Approval", exportable: true },
+  { key: "note", label: "Qeyd", exportable: true },
+  { key: "action", label: "Əməliyyat", exportable: false },
+];
+
+const DEFAULT_VISIBLE_COLUMNS = TABLE_COLUMNS.map((column) => column.key);
 
 const getLabel = (list, value) =>
   list.find((item) => item.value === value)?.label || value || "-";
 
-const getNextValue = (list, current) => {
-  const index = list.findIndex((item) => item.value === current);
-  if (index === -1) return list[0]?.value;
-  return list[(index + 1) % list.length]?.value;
+const formatNumber = (value) => {
+  if (value === null || value === undefined || value === "") return "-";
+  return new Intl.NumberFormat("az-AZ").format(Number(value || 0));
 };
 
 const getBadgeStyle = (value) => {
   const map = {
-    active: {
-      background: "#dcfce7",
-      color: "#166534",
-      border: "1px solid #bbf7d0",
-    },
-    inactive: {
-      background: "#f3f4f6",
-      color: "#4b5563",
-      border: "1px solid #e5e7eb",
-    },
-    draft: {
-      background: "#fef3c7",
-      color: "#92400e",
-      border: "1px solid #fde68a",
-    },
-    archived: {
-      background: "#e5e7eb",
-      color: "#374151",
-      border: "1px solid #d1d5db",
-    },
-    pending: {
-      background: "#dbeafe",
-      color: "#1d4ed8",
-      border: "1px solid #bfdbfe",
-    },
-    approved: {
-      background: "#dcfce7",
-      color: "#166534",
-      border: "1px solid #bbf7d0",
-    },
-    rejected: {
-      background: "#fee2e2",
-      color: "#991b1b",
-      border: "1px solid #fecaca",
-    },
-    incomplete: {
-      background: "#ffedd5",
-      color: "#9a3412",
-      border: "1px solid #fed7aa",
-    },
+    active: { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" },
+    inactive: { background: "#f3f4f6", color: "#4b5563", border: "1px solid #e5e7eb" },
+    draft: { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" },
+    archived: { background: "#e5e7eb", color: "#374151", border: "1px solid #d1d5db" },
+    pending: { background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe" },
+    approved: { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" },
+    rejected: { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" },
+    incomplete: { background: "#ffedd5", color: "#9a3412", border: "1px solid #fed7aa" },
   };
 
-  return {
-    ...styles.badge,
-    ...(map[value] || map.inactive),
-  };
+  return { ...styles.badge, ...(map[value] || map.inactive) };
 };
 
-const emptyTypeForm = {
-  name: "",
-  slug: "",
-  status: "active",
-};
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
 
-const emptyOrgForm = {
-  name: "",
-  organization_type_id: "",
-  website: "",
-  contact_person: "",
-  phone: "",
-  email: "",
-  address: "",
-  region: "",
-  balance: 0,
-  lead_price: 0,
-  status: "draft",
-  approval_status: "pending",
-  note: "",
-};
+function getExportColumns(visibleColumns) {
+  return visibleColumns.filter((column) => column.exportable);
+}
+
+function downloadCsv(rows, columns, getValue) {
+  const exportColumns = getExportColumns(columns);
+  const headers = exportColumns.map((column) => column.label);
+  const body = rows.map((item, index) =>
+    exportColumns.map((column) => getValue(column.key, item, index))
+  );
+  const csv = [headers, ...body]
+    .map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(","))
+    .join("\n");
+
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "vabank-teskilatlar.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadExcel(rows, columns, getValue) {
+  const exportColumns = getExportColumns(columns);
+  const html = `
+    <html>
+      <head><meta charset="UTF-8" /></head>
+      <body>
+        <table border="1">
+          <thead>
+            <tr>${exportColumns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows
+              .map(
+                (item, index) => `
+                  <tr>
+                    ${exportColumns
+                      .map((column) => `<td>${escapeHtml(getValue(column.key, item, index))}</td>`)
+                      .join("")}
+                  </tr>
+                `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob(["\uFEFF" + html], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "vabank-teskilatlar.xls";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyRows(rows, columns, getValue, setMessage) {
+  const exportColumns = getExportColumns(columns);
+  const headers = exportColumns.map((column) => column.label);
+  const body = rows.map((item, index) =>
+    exportColumns.map((column) => getValue(column.key, item, index))
+  );
+  const text = [headers, ...body].map((row) => row.join("\t")).join("\n");
+
+  try {
+    await navigator.clipboard.writeText(text);
+    setMessage("Cədvəl məlumatları kopyalandı.");
+  } catch {
+    setMessage("Kopyalama alınmadı.");
+  }
+}
 
 export default function OrganizationsPage() {
   const [organizationTypes, setOrganizationTypes] = useState([]);
   const [organizations, setOrganizations] = useState([]);
-  const [typeForm, setTypeForm] = useState(emptyTypeForm);
-  const [orgForm, setOrgForm] = useState(emptyOrgForm);
-  const [editingTypeId, setEditingTypeId] = useState(null);
-  const [editingOrgId, setEditingOrgId] = useState(null);
-  const [typeSlugTouched, setTypeSlugTouched] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [savingType, setSavingType] = useState(false);
-  const [savingOrg, setSavingOrg] = useState(false);
   const [message, setMessage] = useState("");
 
-  const typeMap = useMemo(() => {
-    const map = {};
-    organizationTypes.forEach((item) => {
-      map[item.id] = item;
-    });
-    return map;
-  }, [organizationTypes]);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [approvalFilter, setApprovalFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState("all");
+  const [rowLimit, setRowLimit] = useState("25");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [columnPanelOpen, setColumnPanelOpen] = useState(false);
+
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_VISIBLE_COLUMNS;
+
+    try {
+      const saved = localStorage.getItem(COLUMN_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : null;
+      const allowed = TABLE_COLUMNS.map((column) => column.key);
+      const clean = Array.isArray(parsed)
+        ? parsed.filter((key) => allowed.includes(key))
+        : DEFAULT_VISIBLE_COLUMNS;
+
+      return clean.length ? clean : DEFAULT_VISIBLE_COLUMNS;
+    } catch {
+      return DEFAULT_VISIBLE_COLUMNS;
+    }
+  });
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(visibleColumnKeys));
+    } catch {}
+  }, [visibleColumnKeys]);
 
   const loadData = async () => {
     setLoading(true);
@@ -140,203 +187,140 @@ export default function OrganizationsPage() {
       supabase.from("organizations").select("*").order("id", { ascending: false }),
     ]);
 
-    if (typesRes.error) {
-      setMessage("Təşkilat növləri yüklənmədi: " + typesRes.error.message);
-    } else {
-      setOrganizationTypes(typesRes.data || []);
-    }
+    const errors = [];
 
-    if (orgsRes.error) {
-      setMessage((prev) =>
-        prev
-          ? `${prev} | Təşkilatlar yüklənmədi: ${orgsRes.error.message}`
-          : "Təşkilatlar yüklənmədi: " + orgsRes.error.message
-      );
-    } else {
-      setOrganizations(orgsRes.data || []);
-    }
+    if (typesRes.error) errors.push("Təşkilat növləri yüklənmədi: " + typesRes.error.message);
+    else setOrganizationTypes(typesRes.data || []);
 
+    if (orgsRes.error) errors.push("Təşkilatlar yüklənmədi: " + orgsRes.error.message);
+    else setOrganizations(orgsRes.data || []);
+
+    if (errors.length) setMessage(errors.join(" | "));
     setLoading(false);
   };
 
-  const resetTypeForm = () => {
-    setTypeForm(emptyTypeForm);
-    setEditingTypeId(null);
-    setTypeSlugTouched(false);
-  };
-
-  const resetOrgForm = () => {
-    setOrgForm(emptyOrgForm);
-    setEditingOrgId(null);
-  };
-
-  const handleTypeNameChange = (value) => {
-    setTypeForm((prev) => ({
-      ...prev,
-      name: value,
-      slug: typeSlugTouched ? prev.slug : slugify(value),
-    }));
-  };
-
-  const handleTypeSlugChange = (value) => {
-    setTypeSlugTouched(true);
-    setTypeForm((prev) => ({
-      ...prev,
-      slug: slugify(value),
-    }));
-  };
-
-  const saveType = async (e) => {
-    e.preventDefault();
-
-    if (!typeForm.name.trim()) {
-      setMessage("Təşkilat növü adı boş ola bilməz.");
-      return;
-    }
-
-    if (!typeForm.slug.trim()) {
-      setMessage("Slug / sistem açarı boş ola bilməz.");
-      return;
-    }
-
-    setSavingType(true);
-    setMessage("");
-
-    const payload = {
-      name: typeForm.name.trim(),
-      slug: slugify(typeForm.slug),
-      status: typeForm.status,
-    };
-
-    const response = editingTypeId
-      ? await supabase.from("organization_types").update(payload).eq("id", editingTypeId)
-      : await supabase.from("organization_types").insert([payload]);
-
-    setSavingType(false);
-
-    if (response.error) {
-      setMessage("Təşkilat növü yadda saxlanmadı: " + response.error.message);
-      return;
-    }
-
-    setMessage(editingTypeId ? "Təşkilat növü yeniləndi." : "Təşkilat növü əlavə olundu.");
-    resetTypeForm();
-    loadData();
-  };
-
-  const startEditType = (item) => {
-    setEditingTypeId(item.id);
-    setTypeForm({
-      name: item.name || "",
-      slug: item.slug || "",
-      status: item.status || "active",
+  const typeMap = useMemo(() => {
+    const map = {};
+    organizationTypes.forEach((item) => {
+      map[item.id] = item;
     });
-    setTypeSlugTouched(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+    return map;
+  }, [organizationTypes]);
 
-  const updateTypeStatus = async (item, nextStatus) => {
-    if (!nextStatus || nextStatus === item.status) return;
+  const regionOptions = useMemo(() => {
+    const regions = organizations
+      .map((item) => item.region)
+      .filter(Boolean)
+      .map((item) => String(item).trim())
+      .filter(Boolean);
 
-    const { error } = await supabase
-      .from("organization_types")
-      .update({ status: nextStatus })
-      .eq("id", item.id);
+    return Array.from(new Set(regions)).sort((a, b) => a.localeCompare(b));
+  }, [organizations]);
 
-    if (error) {
-      setMessage("Təşkilat növü statusu dəyişmədi: " + error.message);
-      return;
-    }
+  const visibleColumns = useMemo(
+    () =>
+      visibleColumnKeys
+        .map((key) => TABLE_COLUMNS.find((column) => column.key === key))
+        .filter(Boolean),
+    [visibleColumnKeys]
+  );
 
-    setMessage("Təşkilat növü statusu yeniləndi.");
-    loadData();
-  };
-
-  const deleteType = async (item) => {
-    const confirmed = window.confirm(
-      `"${item.name}" təşkilat növünü silmək istədiyinizə əminsiniz?`
+  const orderedColumnsForPanel = useMemo(() => {
+    const visibleOrdered = visibleColumnKeys
+      .map((key) => TABLE_COLUMNS.find((column) => column.key === key))
+      .filter(Boolean);
+    const hiddenColumns = TABLE_COLUMNS.filter(
+      (column) => !visibleColumnKeys.includes(column.key)
     );
-    if (!confirmed) return;
 
-    const { error } = await supabase.from("organization_types").delete().eq("id", item.id);
+    return [...visibleOrdered, ...hiddenColumns];
+  }, [visibleColumnKeys]);
 
-    if (error) {
-      setMessage("Təşkilat növü silinmədi: " + error.message);
-      return;
-    }
-
-    if (editingTypeId === item.id) resetTypeForm();
-
-    setMessage("Təşkilat növü silindi.");
-    loadData();
-  };
-
-  const saveOrganization = async (e) => {
-    e.preventDefault();
-
-    if (!orgForm.name.trim()) {
-      setMessage("Təşkilat adı boş ola bilməz.");
-      return;
-    }
-
-    if (!orgForm.organization_type_id) {
-      setMessage("Təşkilat növü seçilməlidir.");
-      return;
-    }
-
-    setSavingOrg(true);
-    setMessage("");
-
-    const payload = {
-      name: orgForm.name.trim(),
-      organization_type_id: Number(orgForm.organization_type_id),
-      website: orgForm.website.trim() || null,
-      contact_person: orgForm.contact_person.trim() || null,
-      phone: orgForm.phone.trim() || null,
-      email: orgForm.email.trim() || null,
-      address: orgForm.address.trim() || null,
-      region: orgForm.region.trim() || null,
-      balance: Number(orgForm.balance || 0),
-      lead_price: Number(orgForm.lead_price || 0),
-      status: orgForm.status,
-      approval_status: orgForm.approval_status,
-      note: orgForm.note.trim() || null,
+  const getCellValue = (columnKey, item, index = 0) => {
+    const values = {
+      rowNumber: index + 1,
+      name: item.name || "-",
+      type: typeMap[item.organization_type_id]?.name || "-",
+      contact: item.contact_person || "-",
+      phone: item.phone || "-",
+      email: item.email || "-",
+      region: item.region || "-",
+      website: item.website || "-",
+      balance: `${formatNumber(item.balance)} AZN`,
+      leadPrice: `${formatNumber(item.lead_price)} AZN`,
+      status: getLabel(ORGANIZATION_STATUSES, item.status),
+      approval: getLabel(APPROVAL_STATUSES, item.approval_status),
+      note: item.note || "-",
     };
 
-    const response = editingOrgId
-      ? await supabase.from("organizations").update(payload).eq("id", editingOrgId)
-      : await supabase.from("organizations").insert([payload]);
-
-    setSavingOrg(false);
-
-    if (response.error) {
-      setMessage("Təşkilat yadda saxlanmadı: " + response.error.message);
-      return;
-    }
-
-    setMessage(editingOrgId ? "Təşkilat yeniləndi." : "Təşkilat əlavə olundu.");
-    resetOrgForm();
-    loadData();
+    return values[columnKey] ?? "";
   };
 
-  const startEditOrganization = (item) => {
-    setEditingOrgId(item.id);
-    setOrgForm({
-      name: item.name || "",
-      organization_type_id: item.organization_type_id ? String(item.organization_type_id) : "",
-      website: item.website || "",
-      contact_person: item.contact_person || "",
-      phone: item.phone || "",
-      email: item.email || "",
-      address: item.address || "",
-      region: item.region || "",
-      balance: item.balance ?? 0,
-      lead_price: item.lead_price ?? 0,
-      status: item.status || "draft",
-      approval_status: item.approval_status || "pending",
-      note: item.note || "",
+  const filteredOrganizations = useMemo(() => {
+    return organizations.filter((item) => {
+      const query = search.trim().toLowerCase();
+      const searchable = [
+        item.name,
+        item.email,
+        item.phone,
+        item.contact_person,
+        typeMap[item.organization_type_id]?.name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = !query || searchable.includes(query);
+      const matchesType =
+        typeFilter === "all" || String(item.organization_type_id) === String(typeFilter);
+      const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+      const matchesApproval =
+        approvalFilter === "all" || item.approval_status === approvalFilter;
+      const matchesRegion = regionFilter === "all" || item.region === regionFilter;
+
+      return matchesSearch && matchesType && matchesStatus && matchesApproval && matchesRegion;
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [organizations, search, typeFilter, statusFilter, approvalFilter, regionFilter, typeMap]);
+
+  const visibleOrganizations = useMemo(
+    () => filteredOrganizations.slice(0, Number(rowLimit)),
+    [filteredOrganizations, rowLimit]
+  );
+
+  const toggleColumn = (columnKey) => {
+    setVisibleColumnKeys((prev) => {
+      if (prev.includes(columnKey)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((key) => key !== columnKey);
+      }
+
+      return [...prev, columnKey];
+    });
+  };
+
+  const moveColumn = (columnKey, direction) => {
+    setVisibleColumnKeys((prev) => {
+      const currentIndex = prev.indexOf(columnKey);
+      if (currentIndex === -1) return prev;
+
+      const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      if (nextIndex < 0 || nextIndex >= prev.length) return prev;
+
+      const next = [...prev];
+      const temp = next[currentIndex];
+      next[currentIndex] = next[nextIndex];
+      next[nextIndex] = temp;
+
+      return next;
+    });
+  };
+
+  const selectAllColumns = () => {
+    setVisibleColumnKeys(DEFAULT_VISIBLE_COLUMNS);
+  };
+
+  const resetColumns = () => {
+    setVisibleColumnKeys(DEFAULT_VISIBLE_COLUMNS);
   };
 
   const updateOrgStatus = async (item, nextStatus) => {
@@ -386,749 +370,741 @@ export default function OrganizationsPage() {
       return;
     }
 
-    if (editingOrgId === item.id) resetOrgForm();
-
     setMessage("Təşkilat silindi.");
     loadData();
   };
 
+  const renderCell = (columnKey, item, index) => {
+    if (columnKey === "rowNumber") return index + 1;
+
+    if (columnKey === "name") {
+      return (
+        <Link href={`/admin/organizations/${item.id}`} style={styles.nameLink}>
+          {item.name || "-"}
+        </Link>
+      );
+    }
+
+    if (columnKey === "status") {
+      return (
+        <select
+          value={item.status || "draft"}
+          onChange={(e) => updateOrgStatus(item, e.target.value)}
+          style={styles.statusSelect}
+          aria-label="Organization status"
+        >
+          {ORGANIZATION_STATUSES.map((status) => (
+            <option key={status.value} value={status.value}>
+              {status.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (columnKey === "approval") {
+      return (
+        <select
+          value={item.approval_status || "pending"}
+          onChange={(e) => updateApprovalStatus(item, e.target.value)}
+          style={styles.statusSelect}
+          aria-label="Approval status"
+        >
+          {APPROVAL_STATUSES.map((status) => (
+            <option key={status.value} value={status.value}>
+              {status.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (columnKey === "note") {
+      return (
+        <span title={item.note || "-"} style={styles.ellipsisCell}>
+          {item.note || "-"}
+        </span>
+      );
+    }
+
+    if (columnKey === "action") {
+      return (
+        <div style={styles.actionGroup}>
+          <Link href={`/admin/organizations/settings?edit=${item.id}`} style={styles.editBtn}>
+            Edit
+          </Link>
+          <button type="button" onClick={() => deleteOrganization(item)} style={styles.deleteBtn}>
+            Sil
+          </button>
+        </div>
+      );
+    }
+
+    return getCellValue(columnKey, item, index) || "-";
+  };
+
+  if (loading) {
+    return <div style={styles.loadingBox}>Yüklənir...</div>;
+  }
+
   return (
     <div>
       <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Təşkilatlar</h1>
-          <p style={styles.subtitle}>
-            Təşkilat növlərini, təşkilat profillərini və statusları idarə et.
-          </p>
-        </div>
+        <h1 style={styles.title}>Təşkilatlar</h1>
+        <p style={styles.subtitle}>
+          Təşkilatları filterlə, status və approval vəziyyətini idarə et, görünən nəticələri export et.
+        </p>
       </div>
 
       {message ? <div style={styles.messageBox}>{message}</div> : null}
 
-      <div style={styles.topGrid}>
-        <section style={styles.panel}>
-          <div style={styles.panelHeader}>
-            <h2 style={styles.panelTitle}>
-              {editingTypeId ? "Təşkilat növünü redaktə et" : "Təşkilat növü əlavə et"}
-            </h2>
-            <p style={styles.panelDesc}>
-              Növ adı, slug və aktivlik statusunu buradan idarə et.
-            </p>
-          </div>
+      <div style={styles.panel}>
+        <div style={styles.filters}>
+          <input
+            placeholder="Təşkilat, email, telefon və ya əlaqədar şəxs axtar"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={styles.input}
+          />
 
-          <form onSubmit={saveType}>
-            <div style={styles.formGrid}>
-              <div>
-                <label style={styles.label}>Növ adı</label>
-                <input
-                  style={styles.input}
-                  placeholder="Məsələn: Kredit ittifaqı"
-                  value={typeForm.name}
-                  onChange={(e) => handleTypeNameChange(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Slug / sistem açarı</label>
-                <input
-                  style={styles.input}
-                  placeholder="Məsələn: kredit-ittifaqi"
-                  value={typeForm.slug}
-                  onChange={(e) => handleTypeSlugChange(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div style={styles.singleField}>
-              <label style={styles.label}>Status</label>
-              <select
-                style={styles.select}
-                value={typeForm.status}
-                onChange={(e) =>
-                  setTypeForm((prev) => ({ ...prev, status: e.target.value }))
-                }
-              >
-                {ORGANIZATION_TYPE_STATUSES.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.actionRow}>
-              <button type="submit" style={styles.primaryButton} disabled={savingType}>
-                {savingType
-                  ? "Yadda saxlanır..."
-                  : editingTypeId
-                  ? "Təşkilat növünü yenilə"
-                  : "Təşkilat növü əlavə et"}
-              </button>
-
-              {editingTypeId ? (
-                <button type="button" style={styles.secondaryButton} onClick={resetTypeForm}>
-                  Ləğv et
-                </button>
-              ) : null}
-            </div>
-          </form>
-
-          <div style={styles.sectionTitle}>Mövcud növlər</div>
-
-          <div style={styles.stack}>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={styles.select}>
+            <option value="all">Bütün təşkilat növləri</option>
             {organizationTypes.map((item) => (
-              <div key={item.id} style={styles.typeCard}>
-                <div style={styles.cardTop}>
-                  <div>
-                    <div style={styles.cardTitle}>{item.name}</div>
-                    <div style={styles.cardSub}>Slug: {item.slug || "-"}</div>
-                  </div>
-
-                  <span style={getBadgeStyle(item.status)}>
-                    {getLabel(ORGANIZATION_TYPE_STATUSES, item.status)}
-                  </span>
-                </div>
-
-                <div style={styles.inlineActions}>
-                  <button
-                    type="button"
-                    style={styles.secondaryButton}
-                    onClick={() => startEditType(item)}
-                  >
-                    Edit et
-                  </button>
-                  <select
-                    value={item.status || "active"}
-                    onChange={(e) => updateTypeStatus(item, e.target.value)}
-                    style={styles.statusSelect}
-                    aria-label="Organization type status"
-                  >
-                    {ORGANIZATION_TYPE_STATUSES.map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    style={styles.deleteButton}
-                    onClick={() => deleteType(item)}
-                  >
-                    Sil
-                  </button>
-                </div>
-              </div>
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
             ))}
+          </select>
 
-            {!organizationTypes.length && !loading ? (
-              <div style={styles.emptyBox}>Hələ təşkilat növü yoxdur.</div>
-            ) : null}
-          </div>
-        </section>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={styles.select}>
+            <option value="all">Bütün statuslar</option>
+            {ORGANIZATION_STATUSES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
 
-        <section style={styles.panel}>
-          <div style={styles.panelHeader}>
-            <h2 style={styles.panelTitle}>
-              {editingOrgId ? "Təşkilatı redaktə et" : "Təşkilat əlavə et"}
-            </h2>
-            <p style={styles.panelDesc}>
-              Təşkilat məlumatları, qiymətlər və statusları buradan yenilə.
-            </p>
-          </div>
+          <select value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value)} style={styles.select}>
+            <option value="all">Bütün approval</option>
+            {APPROVAL_STATUSES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
 
-          <form onSubmit={saveOrganization}>
-            <div style={styles.formGrid}>
-              <div>
-                <label style={styles.label}>Təşkilat adı</label>
-                <input
-                  style={styles.input}
-                  placeholder="Məsələn: Kapital Bank"
-                  value={orgForm.name}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Təşkilat növü</label>
-                <select
-                  style={styles.select}
-                  value={orgForm.organization_type_id}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({
-                      ...prev,
-                      organization_type_id: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Seçin</option>
-                  {organizationTypes.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={styles.label}>Rəsmi sayt</label>
-                <input
-                  style={styles.input}
-                  placeholder="https://..."
-                  value={orgForm.website}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, website: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Əlaqədar şəxs</label>
-                <input
-                  style={styles.input}
-                  placeholder="Ad Soyad"
-                  value={orgForm.contact_person}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({
-                      ...prev,
-                      contact_person: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Telefon</label>
-                <input
-                  style={styles.input}
-                  placeholder="+994..."
-                  value={orgForm.phone}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, phone: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Email</label>
-                <input
-                  style={styles.input}
-                  placeholder="mail@bank.az"
-                  value={orgForm.email}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, email: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Ünvan</label>
-                <input
-                  style={styles.input}
-                  placeholder="Ünvan"
-                  value={orgForm.address}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, address: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Region</label>
-                <input
-                  style={styles.input}
-                  placeholder="Bakı, Gəncə və s."
-                  value={orgForm.region}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, region: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Balans (AZN)</label>
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={orgForm.balance}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, balance: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Lead qiyməti (AZN)</label>
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={orgForm.lead_price}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, lead_price: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Status</label>
-                <select
-                  style={styles.select}
-                  value={orgForm.status}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({ ...prev, status: e.target.value }))
-                  }
-                >
-                  {ORGANIZATION_STATUSES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={styles.label}>Approval status</label>
-                <select
-                  style={styles.select}
-                  value={orgForm.approval_status}
-                  onChange={(e) =>
-                    setOrgForm((prev) => ({
-                      ...prev,
-                      approval_status: e.target.value,
-                    }))
-                  }
-                >
-                  {APPROVAL_STATUSES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div style={styles.singleField}>
-              <label style={styles.label}>Qısa qeyd / təsvir</label>
-              <textarea
-                style={styles.textarea}
-                placeholder="Təşkilat haqqında qısa qeyd"
-                value={orgForm.note}
-                onChange={(e) =>
-                  setOrgForm((prev) => ({ ...prev, note: e.target.value }))
-                }
-              />
-            </div>
-
-            <div style={styles.actionRow}>
-              <button type="submit" style={styles.primaryButton} disabled={savingOrg}>
-                {savingOrg
-                  ? "Yadda saxlanır..."
-                  : editingOrgId
-                  ? "Təşkilatı yenilə"
-                  : "Təşkilat əlavə et"}
-              </button>
-
-              {editingOrgId ? (
-                <button
-                  type="button"
-                  style={styles.secondaryButton}
-                  onClick={resetOrgForm}
-                >
-                  Ləğv et
-                </button>
-              ) : null}
-            </div>
-          </form>
-        </section>
-      </div>
-
-      <section style={styles.bottomPanel}>
-        <div style={styles.panelHeader}>
-          <h2 style={styles.panelTitle}>Mövcud təşkilatlar</h2>
-          <p style={styles.panelDesc}>
-            Əlavə olunmuş təşkilatları buradan redaktə et, statusunu və approval vəziyyətini dəyiş.
-          </p>
+          <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} style={styles.select}>
+            <option value="all">Bütün regionlar</option>
+            {regionOptions.map((region) => (
+              <option key={region} value={region}>
+                {region}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {loading ? <div style={styles.emptyBox}>Yüklənir...</div> : null}
+        <div style={styles.toolbar}>
+          <div style={styles.resultText}>
+            Tapıldı: <strong>{filteredOrganizations.length}</strong> təşkilat
+          </div>
 
-        <div style={styles.orgList}>
-          {organizations.map((org) => (
-            <div key={org.id} style={styles.orgCard}>
-              <div style={styles.cardTop}>
-                <div>
-                  <div style={styles.orgTitle}>{org.name}</div>
-                  <div style={styles.cardSub}>
-                    {typeMap[org.organization_type_id]?.name || "-"}
-                    {org.website ? ` • ${org.website}` : ""}
-                  </div>
+          <div style={styles.toolbarActions}>
+            <label style={styles.showLabel}>Göstər</label>
+            <select value={rowLimit} onChange={(e) => setRowLimit(e.target.value)} style={styles.smallSelect}>
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+
+            <button type="button" onClick={() => setColumnPanelOpen(true)} style={styles.columnBtn}>
+              Sütun seç
+            </button>
+
+            <div style={styles.exportWrap}>
+              <button type="button" onClick={() => setExportOpen((prev) => !prev)} style={styles.exportBtn}>
+                Export
+              </button>
+
+              {exportOpen ? (
+                <div style={styles.exportMenu}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportOpen(false);
+                      window.print();
+                    }}
+                    style={styles.exportMenuItem}
+                  >
+                    Çap / PDF
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportOpen(false);
+                      copyRows(visibleOrganizations, visibleColumns, getCellValue, setMessage);
+                    }}
+                    style={styles.exportMenuItem}
+                  >
+                    Kopyala
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportOpen(false);
+                      downloadCsv(visibleOrganizations, visibleColumns, getCellValue);
+                    }}
+                    style={styles.exportMenuItem}
+                  >
+                    CSV
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportOpen(false);
+                      downloadExcel(visibleOrganizations, visibleColumns, getCellValue);
+                    }}
+                    style={styles.exportMenuItem}
+                  >
+                    Excel file
+                  </button>
                 </div>
-
-                <div style={styles.badgeRow}>
-                  <span style={getBadgeStyle(org.status)}>
-                    {getLabel(ORGANIZATION_STATUSES, org.status)}
-                  </span>
-                  <span style={getBadgeStyle(org.approval_status)}>
-                    {getLabel(APPROVAL_STATUSES, org.approval_status)}
-                  </span>
-                </div>
-              </div>
-
-              <div style={styles.infoGrid}>
-                <div><strong>Əlaqədar şəxs:</strong> {org.contact_person || "-"}</div>
-                <div><strong>Telefon:</strong> {org.phone || "-"}</div>
-                <div><strong>Email:</strong> {org.email || "-"}</div>
-                <div><strong>Ünvan:</strong> {org.address || "-"}</div>
-                <div><strong>Region:</strong> {org.region || "-"}</div>
-                <div><strong>Qeyd:</strong> {org.note || "-"}</div>
-              </div>
-
-              <div style={styles.statsRow}>
-                <div style={styles.statCard}>
-                  <div style={styles.statLabel}>Balans</div>
-                  <div style={styles.statValue}>{org.balance || 0} AZN</div>
-                </div>
-
-                <div style={styles.statCard}>
-                  <div style={styles.statLabel}>Lead qiyməti</div>
-                  <div style={styles.statValue}>{org.lead_price || 0} AZN</div>
-                </div>
-              </div>
-
-              <div style={styles.inlineActions}>
-                <button
-                  type="button"
-                  style={styles.secondaryButton}
-                  onClick={() => startEditOrganization(org)}
-                >
-                  Edit et
-                </button>
-                <select
-                  value={org.status || "draft"}
-                  onChange={(e) => updateOrgStatus(org, e.target.value)}
-                  style={styles.statusSelect}
-                  aria-label="Organization status"
-                >
-                  {ORGANIZATION_STATUSES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={org.approval_status || "pending"}
-                  onChange={(e) => updateApprovalStatus(org, e.target.value)}
-                  style={styles.statusSelect}
-                  aria-label="Approval status"
-                >
-                  {APPROVAL_STATUSES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  style={styles.deleteButton}
-                  onClick={() => deleteOrganization(org)}
-                >
-                  Sil
-                </button>
-              </div>
+              ) : null}
             </div>
-          ))}
+          </div>
+        </div>
 
-          {!organizations.length && !loading ? (
-            <div style={styles.emptyBox}>Hələ təşkilat əlavə olunmayıb.</div>
+        <div style={styles.tableWrap}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                {visibleColumns.map((column) => (
+                  <th key={column.key} style={styles.th}>
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleOrganizations.map((item, rowIndex) => (
+                <tr key={item.id}>
+                  {visibleColumns.map((column) => (
+                    <td
+                      key={column.key}
+                      style={column.key === "name" ? styles.tdStrong : styles.td}
+                    >
+                      {renderCell(column.key, item, rowIndex)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {!visibleOrganizations.length ? (
+            <div style={styles.emptyBox}>
+              {organizations.length ? "Uyğun təşkilat tapılmadı." : "Hələ təşkilat əlavə olunmayıb."}
+            </div>
           ) : null}
         </div>
-      </section>
+      </div>
+
+      {columnPanelOpen ? (
+        <div style={styles.modalBackdrop}>
+          <div style={styles.modal}>
+            <div style={styles.modalHeader}>
+              <div>
+                <h2 style={styles.modalTitle}>Sütun seç</h2>
+                <p style={styles.modalSubtitle}>Sütunları göstər, gizlət və sırasını dəyiş.</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setColumnPanelOpen(false)}
+                style={styles.modalClose}
+                aria-label="Sütun seç panelini bağla"
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={styles.columnsGrid}>
+              {orderedColumnsForPanel.map((column) => {
+                const isVisible = visibleColumnKeys.includes(column.key);
+                const visibleIndex = visibleColumnKeys.indexOf(column.key);
+
+                return (
+                  <div
+                    key={column.key}
+                    style={{
+                      ...styles.columnOptionRow,
+                      ...(!isVisible ? styles.columnOptionRowHidden : {}),
+                    }}
+                  >
+                    <label style={styles.columnOption}>
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        onChange={() => toggleColumn(column.key)}
+                        style={styles.checkbox}
+                      />
+                      <span>{column.label}</span>
+                    </label>
+
+                    <div style={styles.columnMoveActions}>
+                      <button
+                        type="button"
+                        onClick={() => moveColumn(column.key, "up")}
+                        disabled={!isVisible || visibleIndex <= 0}
+                        style={{
+                          ...styles.moveBtn,
+                          ...(!isVisible || visibleIndex <= 0 ? styles.moveBtnDisabled : {}),
+                        }}
+                      >
+                        ↑
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => moveColumn(column.key, "down")}
+                        disabled={!isVisible || visibleIndex === visibleColumnKeys.length - 1}
+                        style={{
+                          ...styles.moveBtn,
+                          ...(!isVisible || visibleIndex === visibleColumnKeys.length - 1
+                            ? styles.moveBtnDisabled
+                            : {}),
+                        }}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={styles.modalFooter}>
+              <div style={styles.modalFooterLeft}>
+                <button type="button" onClick={selectAllColumns} style={styles.secondaryBtn}>
+                  Hamısını seç
+                </button>
+
+                <button type="button" onClick={resetColumns} style={styles.secondaryBtn}>
+                  Sıfırla
+                </button>
+              </div>
+
+              <button type="button" onClick={() => setColumnPanelOpen(false)} style={styles.primaryBtn}>
+                Təsdiq et
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 const styles = {
+  loadingBox: {
+    padding: "40px",
+    fontSize: "15px",
+    color: "#475569",
+  },
   header: {
     marginBottom: "24px",
   },
   title: {
     margin: 0,
     fontSize: "56px",
-    lineHeight: 1.05,
-    fontWeight: 900,
-    letterSpacing: "-0.03em",
+    fontWeight: 700,
     color: "#0f172a",
   },
   subtitle: {
     marginTop: "10px",
-    marginBottom: 0,
     fontSize: "16px",
     color: "#475569",
-    maxWidth: "760px",
-    lineHeight: 1.6,
+    lineHeight: 1.7,
   },
   messageBox: {
     background: "#f8fafc",
-    color: "#334155",
     border: "1px solid #dbe4ee",
     borderRadius: "18px",
     padding: "14px 16px",
     marginBottom: "18px",
     fontSize: "14px",
-  },
-  topGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-    gap: "20px",
-    alignItems: "start",
+    color: "#334155",
   },
   panel: {
     background: "#ffffff",
     border: "1px solid #dbe4ee",
     borderRadius: "28px",
     padding: "22px",
-    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
   },
-  bottomPanel: {
-    marginTop: "20px",
-    background: "#ffffff",
-    border: "1px solid #dbe4ee",
-    borderRadius: "28px",
-    padding: "22px",
-    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
-  },
-  panelHeader: {
-    marginBottom: "16px",
-  },
-  panelTitle: {
-    margin: 0,
-    fontSize: "30px",
-    lineHeight: 1.15,
-    fontWeight: 850,
-    color: "#0f172a",
-    letterSpacing: "-0.02em",
-  },
-  panelDesc: {
-    margin: "8px 0 0",
-    fontSize: "14px",
-    color: "#64748b",
-    lineHeight: 1.6,
-  },
-  sectionTitle: {
-    marginTop: "22px",
-    marginBottom: "12px",
-    fontSize: "14px",
-    fontWeight: 800,
-    color: "#047857",
-  },
-  formGrid: {
+  filters: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "14px",
-  },
-  singleField: {
-    marginTop: "14px",
-  },
-  label: {
-    display: "block",
-    marginBottom: "8px",
-    fontSize: "14px",
-    fontWeight: 700,
-    color: "#0f172a",
+    marginBottom: "18px",
   },
   input: {
-    width: "100%",
-    height: "48px",
-    boxSizing: "border-box",
-    borderRadius: "16px",
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
+    minHeight: "46px",
+    borderRadius: "14px",
+    border: "1px solid #dbe4ee",
     padding: "0 14px",
-    fontSize: "15px",
-    color: "#0f172a",
+    fontSize: "14px",
     outline: "none",
+    fontFamily: "inherit",
   },
   select: {
-    width: "100%",
-    height: "48px",
-    boxSizing: "border-box",
-    borderRadius: "16px",
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
+    minHeight: "46px",
+    borderRadius: "14px",
+    border: "1px solid #dbe4ee",
     padding: "0 14px",
-    fontSize: "15px",
-    color: "#0f172a",
+    fontSize: "14px",
     outline: "none",
-  },
-  textarea: {
-    width: "100%",
-    minHeight: "110px",
-    boxSizing: "border-box",
-    borderRadius: "16px",
-    border: "1px solid #cbd5e1",
     background: "#ffffff",
-    padding: "14px",
-    fontSize: "15px",
-    color: "#0f172a",
-    outline: "none",
-    resize: "vertical",
+    fontFamily: "inherit",
   },
-  actionRow: {
+  toolbar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+    marginBottom: "14px",
+  },
+  resultText: {
+    fontSize: "14px",
+    color: "#475569",
+  },
+  toolbarActions: {
     display: "flex",
     gap: "10px",
     flexWrap: "wrap",
-    marginTop: "16px",
+    alignItems: "center",
   },
-  primaryButton: {
-    background: "#059669",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "14px",
-    padding: "12px 18px",
+  showLabel: {
     fontSize: "14px",
-    fontWeight: 700,
-    cursor: "pointer",
+    color: "#334155",
   },
-  secondaryButton: {
+  smallSelect: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #dbe4ee",
+    padding: "0 12px",
+    fontSize: "13px",
+    background: "#ffffff",
+    fontFamily: "inherit",
+  },
+  columnBtn: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
     background: "#ffffff",
     color: "#0f172a",
-    border: "1px solid #cbd5e1",
-    borderRadius: "14px",
-    padding: "12px 18px",
-    fontSize: "14px",
+    padding: "0 16px",
+    fontSize: "13px",
     fontWeight: 700,
     cursor: "pointer",
+    fontFamily: "inherit",
   },
-  statusSelect: {
-    minHeight: "42px",
-    minWidth: "150px",
+  exportWrap: {
+    position: "relative",
+  },
+  exportBtn: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
     background: "#ffffff",
     color: "#0f172a",
+    padding: "0 16px",
+    fontSize: "13px",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  exportMenu: {
+    position: "absolute",
+    right: 0,
+    top: "46px",
+    width: "170px",
+    background: "#ffffff",
     border: "1px solid #cbd5e1",
     borderRadius: "14px",
+    padding: "6px",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.16)",
+    zIndex: 20,
+  },
+  exportMenuItem: {
+    width: "100%",
+    minHeight: "38px",
+    border: "0",
+    borderRadius: "10px",
+    background: "#ffffff",
+    textAlign: "left",
     padding: "0 12px",
     fontSize: "14px",
-    fontWeight: 700,
+    fontWeight: 600,
+    color: "#334155",
     cursor: "pointer",
-    outline: "none",
+    fontFamily: "inherit",
   },
-  deleteButton: {
-    background: "#ffffff",
-    color: "#b91c1c",
-    border: "1px solid #fecaca",
-    borderRadius: "14px",
-    padding: "12px 18px",
-    fontSize: "14px",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  stack: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "14px",
-  },
-  typeCard: {
-    background: "#f8fafc",
+  tableWrap: {
+    overflowX: "auto",
     border: "1px solid #e2e8f0",
-    borderRadius: "22px",
-    padding: "18px",
+    borderRadius: "20px",
   },
-  cardTop: {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: "12px",
-    marginBottom: "14px",
-    flexWrap: "wrap",
+  table: {
+    width: "100%",
+    minWidth: "1420px",
+    borderCollapse: "collapse",
   },
-  cardTitle: {
-    fontSize: "18px",
-    fontWeight: 800,
-    color: "#0f172a",
-    marginBottom: "6px",
+  th: {
+    textAlign: "left",
+    padding: "13px 14px",
+    background: "#f8fafc",
+    fontSize: "13px",
+    fontWeight: 700,
+    borderBottom: "1px solid #e2e8f0",
+    borderRight: "1px solid #e2e8f0",
+    whiteSpace: "nowrap",
   },
-  cardSub: {
+  td: {
+    padding: "12px 14px",
     fontSize: "14px",
-    color: "#64748b",
-    lineHeight: 1.5,
+    borderBottom: "1px solid #eef2f7",
+    borderRight: "1px solid #eef2f7",
+    whiteSpace: "nowrap",
+    color: "#334155",
+  },
+  tdStrong: {
+    padding: "12px 14px",
+    fontSize: "14px",
+    fontWeight: 700,
+    borderBottom: "1px solid #eef2f7",
+    borderRight: "1px solid #eef2f7",
+    whiteSpace: "nowrap",
+    color: "#0f172a",
+  },
+  ellipsisCell: {
+    display: "inline-block",
+    maxWidth: "260px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    verticalAlign: "bottom",
   },
   badge: {
+    padding: "8px 12px",
+    borderRadius: "999px",
+    fontSize: "13px",
+    fontWeight: 600,
+    display: "inline-block",
+  },
+  statusSelect: {
+    minHeight: "38px",
+    minWidth: "132px",
+    borderRadius: "12px",
+    border: "1px solid #dbe4ee",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 10px",
+    fontSize: "13px",
+    fontWeight: 600,
+    outline: "none",
+    fontFamily: "inherit",
+  },
+  actionGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  editBtn: {
+    minHeight: "36px",
+    borderRadius: "11px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 12px",
+    fontSize: "13px",
+    fontWeight: 700,
+    textDecoration: "none",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "32px",
+  },
+  nameLink: {
+    color: "#0f172a",
+    fontWeight: 800,
+    textDecoration: "none",
+  },
+  deleteBtn: {
+    minHeight: "36px",
+    borderRadius: "11px",
+    border: "1px solid #fecaca",
+    background: "#ffffff",
+    color: "#b91c1c",
     padding: "0 12px",
-    borderRadius: "999px",
     fontSize: "13px",
     fontWeight: 700,
-    whiteSpace: "nowrap",
+    cursor: "pointer",
+    fontFamily: "inherit",
   },
-  inlineActions: {
+  emptyBox: {
+    padding: "20px",
+    fontSize: "14px",
+    color: "#64748b",
+  },
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15, 23, 42, 0.45)",
+    zIndex: 100,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+  },
+  modal: {
+    width: "min(760px, 100%)",
+    maxHeight: "90vh",
+    background: "#ffffff",
+    borderRadius: "24px",
+    border: "1px solid #dbe4ee",
+    boxShadow: "0 30px 80px rgba(15, 23, 42, 0.25)",
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+  },
+  modalHeader: {
+    padding: "20px 22px",
+    borderBottom: "1px solid #e2e8f0",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    flexShrink: 0,
+  },
+  modalTitle: {
+    margin: 0,
+    fontSize: "22px",
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  modalSubtitle: {
+    margin: "6px 0 0",
+    fontSize: "14px",
+    color: "#64748b",
+  },
+  modalClose: {
+    width: "38px",
+    height: "38px",
+    borderRadius: "12px",
+    border: "1px solid #dbe4ee",
+    background: "#ffffff",
+    fontSize: "28px",
+    lineHeight: 1,
+    cursor: "pointer",
+    color: "#64748b",
+    flexShrink: 0,
+  },
+  columnsGrid: {
+    padding: "22px",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: "14px",
+    overflowY: "auto",
+    flex: 1,
+    minHeight: 0,
+  },
+  columnOptionRow: {
+    minHeight: "44px",
+    border: "1px solid #e2e8f0",
+    borderRadius: "14px",
+    padding: "0 10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+    background: "#ffffff",
+  },
+  columnOptionRowHidden: {
+    opacity: 0.55,
+  },
+  columnOption: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    minHeight: "40px",
+    fontSize: "14px",
+    color: "#0f172a",
+    cursor: "pointer",
+  },
+  checkbox: {
+    width: "18px",
+    height: "18px",
+    cursor: "pointer",
+  },
+  columnMoveActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  },
+  moveBtn: {
+    width: "30px",
+    height: "30px",
+    borderRadius: "10px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontSize: "15px",
+    fontWeight: 800,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  moveBtnDisabled: {
+    opacity: 0.35,
+    cursor: "not-allowed",
+  },
+  modalFooter: {
+    padding: "18px 22px",
+    borderTop: "1px solid #e2e8f0",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    flexWrap: "wrap",
+    flexShrink: 0,
+  },
+  modalFooterLeft: {
     display: "flex",
     gap: "10px",
     flexWrap: "wrap",
   },
-  orgList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  orgCard: {
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "24px",
-    padding: "18px",
-  },
-  orgTitle: {
-    fontSize: "22px",
-    fontWeight: 850,
-    color: "#0f172a",
-    marginBottom: "6px",
-  },
-  badgeRow: {
-    display: "flex",
-    gap: "8px",
-    flexWrap: "wrap",
-  },
-  infoGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "10px 20px",
-    marginBottom: "16px",
-    color: "#334155",
-    fontSize: "14px",
-    lineHeight: 1.6,
-  },
-  statsRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "12px",
-    marginBottom: "14px",
-  },
-  statCard: {
+  secondaryBtn: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
     background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    borderRadius: "18px",
-    padding: "14px",
-  },
-  statLabel: {
-    fontSize: "13px",
-    color: "#64748b",
-    marginBottom: "6px",
-  },
-  statValue: {
-    fontSize: "22px",
-    fontWeight: 850,
     color: "#0f172a",
+    padding: "0 14px",
+    fontSize: "13px",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
   },
-  emptyBox: {
-    background: "#f8fafc",
-    border: "1px dashed #cbd5e1",
-    borderRadius: "18px",
-    padding: "18px",
-    color: "#64748b",
-    textAlign: "center",
-    fontSize: "14px",
+  primaryBtn: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #0f172a",
+    background: "#0f172a",
+    color: "#ffffff",
+    padding: "0 18px",
+    fontSize: "13px",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
   },
 };

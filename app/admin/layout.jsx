@@ -63,6 +63,7 @@ const menuGroups = [
     title: "İdarəetmə",
     items: [
       { href: "/admin/organizations", label: "Təşkilatlar" },
+      { href: "/admin/organizations/settings", label: "Təşkilat ayarları" },
       { href: "/admin/products", label: "Məhsullar" },
       { href: "/admin/products/settings", label: "Məhsul ayarları" },
       { href: "/admin/requirements", label: "Şərtlər" },
@@ -92,6 +93,7 @@ export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  const [mounted, setMounted] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
@@ -103,14 +105,16 @@ export default function AdminLayout({ children }) {
   useEffect(() => {
     let isMounted = true;
     let authResolved = false;
-    const authSnapshot = readAuthSnapshot();
 
-    if (authSnapshot) {
-      setAdminUser(authSnapshot);
+    setMounted(true);
+
+    const authorizeFromSnapshot = (snapshot) => {
+      authResolved = true;
+      setAdminUser(snapshot);
       setIsAuthorized(true);
-      setIsCheckingAuth(false);
       setAuthMessage("");
-    }
+      setIsCheckingAuth(false);
+    };
 
     const redirectAway = (path, message = "Giriş səhifəsinə yönləndirilir...") => {
       authResolved = true;
@@ -123,22 +127,32 @@ export default function AdminLayout({ children }) {
       router.replace(path);
     };
 
+    const authSnapshot = readAuthSnapshot();
+
+    if (authSnapshot) {
+      authorizeFromSnapshot(authSnapshot);
+    } else {
+      clearAuthSnapshot();
+      redirectAway("/login");
+    }
+
     const authTimeout = window.setTimeout(() => {
       if (authResolved || !isMounted) return;
-      if (authSnapshot) return;
+      const latestSnapshot = readAuthSnapshot();
+
+      if (latestSnapshot) {
+        authorizeFromSnapshot(latestSnapshot);
+        return;
+      }
 
       clearAuthSnapshot();
       redirectAway("/login", "Yoxlama tamamlanmadı. Giriş səhifəsinə yönləndirilir...");
-    }, 5000);
+    }, 3000);
 
     async function checkAdminAccess() {
-      try {
-        if (isMounted) {
-          setIsCheckingAuth(!authSnapshot);
-          setIsAuthorized(!!authSnapshot);
-          setAuthMessage(authSnapshot ? "" : "Admin panel yoxlanılır...");
-        }
+      if (!authSnapshot) return;
 
+      try {
         const { data: sessionData } = await supabase.auth.getSession();
         const sessionUser = sessionData?.session?.user;
 
@@ -147,8 +161,6 @@ export default function AdminLayout({ children }) {
           : await supabase.auth.getUser();
 
         if (userError || !userData?.user) {
-          clearAuthSnapshot();
-          redirectAway("/login");
           return;
         }
 
@@ -159,9 +171,6 @@ export default function AdminLayout({ children }) {
           .single();
 
         if (profileError || !profile) {
-          await supabase.auth.signOut();
-          clearAuthSnapshot();
-          redirectAway("/login");
           return;
         }
 
@@ -181,17 +190,12 @@ export default function AdminLayout({ children }) {
 
         if (!isMounted || authResolved) return;
 
-        authResolved = true;
         saveAuthSnapshot(profile);
-        setIsAuthorized(true);
-        setAdminUser(profile);
-        setIsCheckingAuth(false);
+        authorizeFromSnapshot(profile);
       } catch (error) {
-        try {
-          await supabase.auth.signOut();
-        } catch {}
-        clearAuthSnapshot();
-        redirectAway("/login");
+        if (!readAuthSnapshot()) {
+          redirectAway("/login");
+        }
       }
     }
 
@@ -239,6 +243,7 @@ export default function AdminLayout({ children }) {
 
   const isActive = (href) => {
     if (href === "/admin") return pathname === "/admin";
+    if (href === "/admin/organizations") return pathname === href;
     if (href === "/admin/products") return pathname === href;
     return pathname.startsWith(href);
   };
@@ -248,10 +253,12 @@ export default function AdminLayout({ children }) {
     clearAuthSnapshot();
     setIsAuthorized(false);
     setAdminUser(null);
+    setAuthMessage("Giriş səhifəsinə yönləndirilir...");
+    setIsCheckingAuth(false);
     router.replace("/login");
   };
 
-  if (isCheckingAuth) {
+  if (!mounted || isCheckingAuth) {
     return (
       <div style={styles.loadingPage}>
         <div style={styles.loadingCard}>{authMessage}</div>
