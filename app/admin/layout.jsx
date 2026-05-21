@@ -7,11 +7,48 @@ import { supabase } from "../../lib/supabaseClient";
 
 const ADMIN_ROLES = ["super_admin", "admin"];
 
-function getRedirectByRole(role) {
-  if (role === "super_admin" || role === "admin") return "/admin";
-  if (role === "organization_user") return "/organization";
-  if (role === "customer") return "/customer";
-  return "/login";
+function saveAuthSnapshot(profile) {
+  localStorage.setItem(
+    "valyutacred_auth",
+    JSON.stringify({
+      authenticated: true,
+      user_id: profile.id,
+      email: profile.email,
+      full_name: profile.full_name || "",
+      role: profile.role,
+      status: profile.status,
+      organization_id: profile.organization_id || null,
+      updated_at: new Date().toISOString(),
+    })
+  );
+}
+
+function clearAuthSnapshot() {
+  localStorage.removeItem("valyutacred_auth");
+}
+
+function readAuthSnapshot() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = localStorage.getItem("valyutacred_auth");
+    const auth = raw ? JSON.parse(raw) : null;
+
+    if (!auth?.authenticated) return null;
+    if (!ADMIN_ROLES.includes(auth.role)) return null;
+    if (auth.status !== "active") return null;
+
+    return {
+      id: auth.user_id,
+      email: auth.email,
+      full_name: auth.full_name || "",
+      role: auth.role,
+      status: auth.status,
+      organization_id: auth.organization_id || null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 const menuGroups = [
@@ -27,6 +64,7 @@ const menuGroups = [
     items: [
       { href: "/admin/organizations", label: "Təşkilatlar" },
       { href: "/admin/products", label: "Məhsullar" },
+      { href: "/admin/products/settings", label: "Məhsul ayarları" },
       { href: "/admin/requirements", label: "Şərtlər" },
     ],
   },
@@ -55,22 +93,62 @@ export default function AdminLayout({ children }) {
   const router = useRouter();
 
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
+  const [authMessage, setAuthMessage] = useState("Admin panel yoxlanılır...");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
+    let authResolved = false;
+    const authSnapshot = readAuthSnapshot();
+
+    if (authSnapshot) {
+      setAdminUser(authSnapshot);
+      setIsAuthorized(true);
+      setIsCheckingAuth(false);
+      setAuthMessage("");
+    }
+
+    const redirectAway = (path, message = "Giriş səhifəsinə yönləndirilir...") => {
+      authResolved = true;
+      if (isMounted) {
+        setIsAuthorized(false);
+        setAdminUser(null);
+        setAuthMessage(message);
+        setIsCheckingAuth(false);
+      }
+      router.replace(path);
+    };
+
+    const authTimeout = window.setTimeout(() => {
+      if (authResolved || !isMounted) return;
+      if (authSnapshot) return;
+
+      clearAuthSnapshot();
+      redirectAway("/login", "Yoxlama tamamlanmadı. Giriş səhifəsinə yönləndirilir...");
+    }, 5000);
 
     async function checkAdminAccess() {
       try {
-        const { data: userData, error: userError } =
-          await supabase.auth.getUser();
+        if (isMounted) {
+          setIsCheckingAuth(!authSnapshot);
+          setIsAuthorized(!!authSnapshot);
+          setAuthMessage(authSnapshot ? "" : "Admin panel yoxlanılır...");
+        }
+
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sessionUser = sessionData?.session?.user;
+
+        const { data: userData, error: userError } = sessionUser
+          ? { data: { user: sessionUser }, error: null }
+          : await supabase.auth.getUser();
 
         if (userError || !userData?.user) {
-          localStorage.removeItem("valyutacred_auth");
-          router.replace("/login");
+          clearAuthSnapshot();
+          redirectAway("/login");
           return;
         }
 
@@ -82,38 +160,38 @@ export default function AdminLayout({ children }) {
 
         if (profileError || !profile) {
           await supabase.auth.signOut();
-          localStorage.removeItem("valyutacred_auth");
-          router.replace("/login");
+          clearAuthSnapshot();
+          redirectAway("/login");
           return;
         }
 
         if (profile.status !== "active") {
           await supabase.auth.signOut();
-          localStorage.removeItem("valyutacred_auth");
-          router.replace("/login");
+          clearAuthSnapshot();
+          redirectAway("/login");
           return;
         }
 
         if (!ADMIN_ROLES.includes(profile.role)) {
-          const redirectPath = getRedirectByRole(profile.role);
-
-          if (redirectPath === "/login") {
-            await supabase.auth.signOut();
-            localStorage.removeItem("valyutacred_auth");
-          }
-
-          router.replace(redirectPath);
+          await supabase.auth.signOut();
+          clearAuthSnapshot();
+          redirectAway("/login", "Admin paneline giris icazesi yoxdur. Login sehifesine yonlendirilir...");
           return;
         }
 
-        if (!isMounted) return;
+        if (!isMounted || authResolved) return;
 
+        authResolved = true;
+        saveAuthSnapshot(profile);
+        setIsAuthorized(true);
         setAdminUser(profile);
         setIsCheckingAuth(false);
       } catch (error) {
-        await supabase.auth.signOut();
-        localStorage.removeItem("valyutacred_auth");
-        router.replace("/login");
+        try {
+          await supabase.auth.signOut();
+        } catch {}
+        clearAuthSnapshot();
+        redirectAway("/login");
       }
     }
 
@@ -121,6 +199,7 @@ export default function AdminLayout({ children }) {
 
     return () => {
       isMounted = false;
+      window.clearTimeout(authTimeout);
     };
   }, [router]);
 
@@ -147,7 +226,9 @@ export default function AdminLayout({ children }) {
   }, [pathname]);
 
   const currentPageLabel = useMemo(() => {
-    const allItems = menuGroups.flatMap((group) => group.items);
+    const allItems = menuGroups
+      .flatMap((group) => group.items)
+      .sort((a, b) => b.href.length - a.href.length);
     const currentItem = allItems.find((item) => {
       if (item.href === "/admin") return pathname === "/admin";
       return pathname.startsWith(item.href);
@@ -158,19 +239,32 @@ export default function AdminLayout({ children }) {
 
   const isActive = (href) => {
     if (href === "/admin") return pathname === "/admin";
+    if (href === "/admin/products") return pathname === href;
     return pathname.startsWith(href);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem("valyutacred_auth");
+    clearAuthSnapshot();
+    setIsAuthorized(false);
+    setAdminUser(null);
     router.replace("/login");
   };
 
   if (isCheckingAuth) {
     return (
       <div style={styles.loadingPage}>
-        <div style={styles.loadingCard}>Admin panel yoxlanılır...</div>
+        <div style={styles.loadingCard}>{authMessage}</div>
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return (
+      <div style={styles.loadingPage}>
+        <div style={styles.loadingCard}>
+          {authMessage || "Giriş səhifəsinə yönləndirilir..."}
+        </div>
       </div>
     );
   }

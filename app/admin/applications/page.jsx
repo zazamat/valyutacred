@@ -1183,11 +1183,14 @@ const styles = {
 
   modal: {
     width: "min(760px, 100%)",
+    maxHeight: "90vh",
     background: "#ffffff",
     borderRadius: "24px",
     border: "1px solid #dbe4ee",
     boxShadow: "0 30px 80px rgba(15, 23, 42, 0.25)",
     overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
   },
 
   modalHeader: {
@@ -1196,6 +1199,7 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     gap: "16px",
+    flexShrink: 0,
   },
 
   modalTitle: {
@@ -1228,6 +1232,9 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
     gap: "14px",
+    overflowY: "auto",
+    flex: 1,
+    minHeight: 0,
   },
 
   columnOption: {
@@ -1317,6 +1324,7 @@ const styles = {
     justifyContent: "space-between",
     gap: "12px",
     flexWrap: "wrap",
+    flexShrink: 0,
   },
 
   modalFooterLeft: {

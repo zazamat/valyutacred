@@ -12,6 +12,22 @@ function getRedirectByRole(role) {
   return null;
 }
 
+function saveAuthSnapshot(profile) {
+  localStorage.setItem(
+    "valyutacred_auth",
+    JSON.stringify({
+      authenticated: true,
+      user_id: profile.id,
+      email: profile.email,
+      full_name: profile.full_name || "",
+      role: profile.role,
+      status: profile.status,
+      organization_id: profile.organization_id || null,
+      updated_at: new Date().toISOString(),
+    })
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -70,13 +86,14 @@ export default function LoginPage() {
 
       if (!redirectPath) {
         await supabase.auth.signOut();
+        localStorage.removeItem("valyutacred_auth");
         setError("Bu rol üçün giriş icazəsi yoxdur.");
         setIsSubmitting(false);
         return;
       }
 
-      localStorage.removeItem("valyutacred_auth");
-      router.push(redirectPath);
+      saveAuthSnapshot(profile);
+      router.replace(redirectPath);
     } catch (err) {
       setError("Giriş zamanı xəta baş verdi. Zəhmət olmasa yenidən yoxlayın.");
       setIsSubmitting(false);

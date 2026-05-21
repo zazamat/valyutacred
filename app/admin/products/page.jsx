@@ -1,13 +1,9 @@
 "use client";
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
-
-const CREDIT_FORM_STATUSES = [
-  { value: "active", label: "Aktiv" },
-  { value: "inactive", label: "Deaktiv" },
-];
 
 const PRODUCT_STATUSES = [
   { value: "draft", label: "Qaralama" },
@@ -22,124 +18,141 @@ const APPROVAL_STATUSES = [
   { value: "rejected", label: "Rədd edilib" },
 ];
 
-const CURRENCIES = [
-  { value: "AZN", label: "AZN" },
-  { value: "USD", label: "USD" },
-  { value: "EUR", label: "EUR" },
+const ACTIVE_FILTERS = [
+  { value: "all", label: "Bütün aktivliklər" },
+  { value: "active", label: "Aktiv" },
+  { value: "inactive", label: "Deaktiv" },
 ];
 
-const slugify = (text = "") =>
-  text
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/ə/g, "e")
-    .replace(/ü/g, "u")
-    .replace(/ö/g, "o")
-    .replace(/ğ/g, "g")
-    .replace(/ı/g, "i")
-    .replace(/ş/g, "s")
-    .replace(/ç/g, "c")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
+const COLUMN_STORAGE_KEY = "vabank_products_visible_columns";
+
+const TABLE_COLUMNS = [
+  { key: "productName", label: "Məhsul adı", exportable: true },
+  { key: "creditForm", label: "Kredit forması", exportable: true },
+  { key: "organizationType", label: "Təşkilat növü", exportable: true },
+  { key: "organization", label: "Təşkilat", exportable: true },
+  { key: "currency", label: "Valyuta", exportable: true },
+  { key: "amount", label: "Məbləğ", exportable: true },
+  { key: "term", label: "Müddət", exportable: true },
+  { key: "interest", label: "Faiz", exportable: true },
+  { key: "commission", label: "Komissiya", exportable: true },
+  { key: "status", label: "Status", exportable: true },
+  { key: "approval", label: "Approval", exportable: true },
+  { key: "active", label: "Aktiv", exportable: true },
+  { key: "requirements", label: "Şərtlər", exportable: true },
+  { key: "action", label: "Əməliyyat", exportable: false },
+];
+
+const DEFAULT_VISIBLE_COLUMNS = TABLE_COLUMNS.map((column) => column.key);
 
 const getLabel = (list, value) =>
   list.find((item) => item.value === value)?.label || value || "-";
 
-const getNextValue = (list, current) => {
-  const index = list.findIndex((item) => item.value === current);
-  if (index === -1) return list[0]?.value;
-  return list[(index + 1) % list.length]?.value;
-};
-
 const formatNumber = (value) => {
-  const num = Number(value || 0);
-  return new Intl.NumberFormat("az-AZ").format(num);
-};
-
-const safeJsonParse = (value) => {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  if (value === null || value === undefined || value === "") return "-";
+  return new Intl.NumberFormat("az-AZ").format(Number(value || 0));
 };
 
 const getBadgeStyle = (value) => {
   const map = {
-    active: {
-      background: "#dcfce7",
-      color: "#166534",
-      border: "1px solid #bbf7d0",
-    },
-    inactive: {
-      background: "#f3f4f6",
-      color: "#4b5563",
-      border: "1px solid #e5e7eb",
-    },
-    draft: {
-      background: "#fef3c7",
-      color: "#92400e",
-      border: "1px solid #fde68a",
-    },
-    archived: {
-      background: "#e5e7eb",
-      color: "#374151",
-      border: "1px solid #d1d5db",
-    },
-    pending: {
-      background: "#dbeafe",
-      color: "#1d4ed8",
-      border: "1px solid #bfdbfe",
-    },
-    approved: {
-      background: "#dcfce7",
-      color: "#166534",
-      border: "1px solid #bbf7d0",
-    },
-    rejected: {
-      background: "#fee2e2",
-      color: "#991b1b",
-      border: "1px solid #fecaca",
-    },
+    active: { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" },
+    inactive: { background: "#f3f4f6", color: "#4b5563", border: "1px solid #e5e7eb" },
+    draft: { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" },
+    archived: { background: "#e5e7eb", color: "#374151", border: "1px solid #d1d5db" },
+    pending: { background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe" },
+    approved: { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" },
+    rejected: { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" },
   };
 
-  return {
-    ...styles.badge,
-    ...(map[value] || map.inactive),
-  };
+  return { ...styles.badge, ...(map[value] || map.inactive) };
 };
 
-const emptyCreditForm = {
-  name: "",
-  slug: "",
-  status: "active",
-};
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
 
-const emptyProductForm = {
-  credit_form_id: "",
-  organization_type_id: "",
-  organization_id: "",
-  product_name: "",
-  currency: "AZN",
-  min_amount: "",
-  max_amount: "",
-  min_term_months: "",
-  max_term_months: "",
-  min_interest: "",
-  default_interest: "",
-  max_interest: "",
-  has_commission: false,
-  commission_amount: "",
-  status: "draft",
-  approval_status: "pending",
-  is_active: true,
-  note: "",
-};
+function getExportColumns(visibleColumns) {
+  return visibleColumns.filter((column) => column.exportable);
+}
+
+function downloadCsv(rows, columns, getValue) {
+  const exportColumns = getExportColumns(columns);
+  const headers = exportColumns.map((column) => column.label);
+  const body = rows.map((item) => exportColumns.map((column) => getValue(column.key, item)));
+  const csv = [headers, ...body]
+    .map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(","))
+    .join("\n");
+
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "vabank-mehsullar.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadExcel(rows, columns, getValue) {
+  const exportColumns = getExportColumns(columns);
+  const html = `
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+      </head>
+      <body>
+        <table border="1">
+          <thead>
+            <tr>
+              ${exportColumns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows
+              .map(
+                (item) => `
+                  <tr>
+                    ${exportColumns
+                      .map((column) => `<td>${escapeHtml(getValue(column.key, item))}</td>`)
+                      .join("")}
+                  </tr>
+                `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob(["\uFEFF" + html], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "vabank-mehsullar.xls";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyRows(rows, columns, getValue, setMessage) {
+  const exportColumns = getExportColumns(columns);
+  const headers = exportColumns.map((column) => column.label);
+  const body = rows.map((item) => exportColumns.map((column) => getValue(column.key, item)));
+  const text = [headers, ...body].map((row) => row.join("\t")).join("\n");
+
+  try {
+    await navigator.clipboard.writeText(text);
+    setMessage("Cədvəl məlumatları kopyalandı.");
+  } catch {
+    setMessage("Kopyalama alınmadı.");
+  }
+}
 
 export default function ProductsPage() {
   const [creditForms, setCreditForms] = useState([]);
@@ -148,74 +161,46 @@ export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [requirementTypes, setRequirementTypes] = useState([]);
   const [productRequirements, setProductRequirements] = useState([]);
-
-  const [creditFormEditor, setCreditFormEditor] = useState(emptyCreditForm);
-  const [productForm, setProductForm] = useState(emptyProductForm);
-  const [requirementValues, setRequirementValues] = useState({});
-
-  const [editingCreditFormId, setEditingCreditFormId] = useState(null);
-  const [editingProductId, setEditingProductId] = useState(null);
-  const [creditFormSlugTouched, setCreditFormSlugTouched] = useState(false);
-  const [productNameTouched, setProductNameTouched] = useState(false);
-
   const [loading, setLoading] = useState(true);
-  const [savingCreditForm, setSavingCreditForm] = useState(false);
-  const [savingProduct, setSavingProduct] = useState(false);
   const [message, setMessage] = useState("");
 
-  const typeMap = useMemo(() => {
-    const map = {};
-    organizationTypes.forEach((item) => {
-      map[item.id] = item;
-    });
-    return map;
-  }, [organizationTypes]);
+  const [search, setSearch] = useState("");
+  const [creditFormFilter, setCreditFormFilter] = useState("all");
+  const [organizationTypeFilter, setOrganizationTypeFilter] = useState("all");
+  const [organizationFilter, setOrganizationFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [approvalFilter, setApprovalFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [rowLimit, setRowLimit] = useState("25");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [columnPanelOpen, setColumnPanelOpen] = useState(false);
 
-  const orgMap = useMemo(() => {
-    const map = {};
-    organizations.forEach((item) => {
-      map[item.id] = item;
-    });
-    return map;
-  }, [organizations]);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_VISIBLE_COLUMNS;
 
-  const creditFormMap = useMemo(() => {
-    const map = {};
-    creditForms.forEach((item) => {
-      map[item.id] = item;
-    });
-    return map;
-  }, [creditForms]);
+    try {
+      const saved = localStorage.getItem(COLUMN_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : null;
+      const allowed = TABLE_COLUMNS.map((column) => column.key);
+      const clean = Array.isArray(parsed)
+        ? parsed.filter((key) => allowed.includes(key))
+        : DEFAULT_VISIBLE_COLUMNS;
 
-  const requirementsByProductId = useMemo(() => {
-    const map = {};
-    productRequirements.forEach((item) => {
-      if (!map[item.product_id]) {
-        map[item.product_id] = [];
-      }
-      map[item.product_id].push(item);
-    });
-    return map;
-  }, [productRequirements]);
-
-  const filteredOrganizations = useMemo(() => {
-    if (!productForm.organization_type_id) return [];
-    return organizations.filter(
-      (item) => String(item.organization_type_id) === String(productForm.organization_type_id)
-    );
-  }, [organizations, productForm.organization_type_id]);
-
-  const activeRequirementTypes = useMemo(
-    () =>
-      requirementTypes
-        .filter((item) => item.status === "active")
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
-    [requirementTypes]
-  );
+      return clean.length ? clean : DEFAULT_VISIBLE_COLUMNS;
+    } catch {
+      return DEFAULT_VISIBLE_COLUMNS;
+    }
+  });
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(visibleColumnKeys));
+    } catch {}
+  }, [visibleColumnKeys]);
 
   const loadData = async () => {
     setLoading(true);
@@ -264,334 +249,234 @@ export default function ProductsPage() {
       errors.push("Məhsul şərtləri yüklənmədi: " + productRequirementsRes.error.message);
     else setProductRequirements(productRequirementsRes.data || []);
 
-    if (errors.length) {
-      setMessage(errors.join(" | "));
-    }
-
+    if (errors.length) setMessage(errors.join(" | "));
     setLoading(false);
   };
 
-  const resetCreditFormEditor = () => {
-    setCreditFormEditor(emptyCreditForm);
-    setEditingCreditFormId(null);
-    setCreditFormSlugTouched(false);
-  };
+  const creditFormMap = useMemo(() => {
+    const map = {};
+    creditForms.forEach((item) => {
+      map[item.id] = item;
+    });
+    return map;
+  }, [creditForms]);
 
-  const resetProductForm = () => {
-    setProductForm(emptyProductForm);
-    setRequirementValues({});
-    setEditingProductId(null);
-    setProductNameTouched(false);
-  };
+  const typeMap = useMemo(() => {
+    const map = {};
+    organizationTypes.forEach((item) => {
+      map[item.id] = item;
+    });
+    return map;
+  }, [organizationTypes]);
 
-  const handleCreditFormNameChange = (value) => {
-    setCreditFormEditor((prev) => ({
-      ...prev,
-      name: value,
-      slug: creditFormSlugTouched ? prev.slug : slugify(value),
-    }));
-  };
+  const orgMap = useMemo(() => {
+    const map = {};
+    organizations.forEach((item) => {
+      map[item.id] = item;
+    });
+    return map;
+  }, [organizations]);
 
-  const handleCreditFormSlugChange = (value) => {
-    setCreditFormSlugTouched(true);
-    setCreditFormEditor((prev) => ({
-      ...prev,
-      slug: slugify(value),
-    }));
-  };
+  const requirementsByProductId = useMemo(() => {
+    const map = {};
+    productRequirements.forEach((item) => {
+      if (!map[item.product_id]) map[item.product_id] = [];
+      map[item.product_id].push(item);
+    });
+    return map;
+  }, [productRequirements]);
 
-  const handleRequirementValueChange = (requirement, value) => {
-    setRequirementValues((prev) => ({
-      ...prev,
-      [String(requirement.id)]: value,
-    }));
-  };
+  const visibleColumns = useMemo(
+    () =>
+      visibleColumnKeys
+        .map((key) => TABLE_COLUMNS.find((column) => column.key === key))
+        .filter(Boolean),
+    [visibleColumnKeys]
+  );
 
-  const buildRequirementPayloads = (productId) => {
-    return activeRequirementTypes
-      .map((requirement) => {
-        const key = String(requirement.id);
-        const rawValue = requirementValues[key];
-
-        if (requirement.input_type === "boolean") {
-          if (!rawValue) return null;
-          return {
-            product_id: productId,
-            requirement_type_id: requirement.id,
-            value_boolean: true,
-            value_text: null,
-            value_number: null,
-            value_json: null,
-            updated_at: new Date().toISOString(),
-          };
-        }
-
-        if (requirement.input_type === "number") {
-          if (rawValue === "" || rawValue === null || rawValue === undefined) return null;
-          return {
-            product_id: productId,
-            requirement_type_id: requirement.id,
-            value_boolean: null,
-            value_text: null,
-            value_number: Number(rawValue),
-            value_json: null,
-            updated_at: new Date().toISOString(),
-          };
-        }
-
-        if (requirement.input_type === "select") {
-          if (!rawValue) return null;
-          return {
-            product_id: productId,
-            requirement_type_id: requirement.id,
-            value_boolean: null,
-            value_text: String(rawValue),
-            value_number: null,
-            value_json: null,
-            updated_at: new Date().toISOString(),
-          };
-        }
-
-        if (!rawValue) return null;
-        return {
-          product_id: productId,
-          requirement_type_id: requirement.id,
-          value_boolean: null,
-          value_text: String(rawValue),
-          value_number: null,
-          value_json: null,
-          updated_at: new Date().toISOString(),
-        };
-      })
+  const orderedColumnsForPanel = useMemo(() => {
+    const visibleOrdered = visibleColumnKeys
+      .map((key) => TABLE_COLUMNS.find((column) => column.key === key))
       .filter(Boolean);
-  };
 
-  const saveCreditForm = async (e) => {
-    e.preventDefault();
-
-    if (!creditFormEditor.name.trim()) {
-      setMessage("Kredit forması adı boş ola bilməz.");
-      return;
-    }
-
-    if (!creditFormEditor.slug.trim()) {
-      setMessage("Slug boş ola bilməz.");
-      return;
-    }
-
-    setSavingCreditForm(true);
-    setMessage("");
-
-    const payload = {
-      name: creditFormEditor.name.trim(),
-      slug: slugify(creditFormEditor.slug),
-      status: creditFormEditor.status,
-    };
-
-    const response = editingCreditFormId
-      ? await supabase.from("credit_forms").update(payload).eq("id", editingCreditFormId)
-      : await supabase.from("credit_forms").insert([payload]);
-
-    setSavingCreditForm(false);
-
-    if (response.error) {
-      setMessage("Kredit forması yadda saxlanmadı: " + response.error.message);
-      return;
-    }
-
-    setMessage(editingCreditFormId ? "Kredit forması yeniləndi." : "Kredit forması əlavə olundu.");
-    resetCreditFormEditor();
-    loadData();
-  };
-
-  const startEditCreditForm = (item) => {
-    setEditingCreditFormId(item.id);
-    setCreditFormEditor({
-      name: item.name || "",
-      slug: item.slug || "",
-      status: item.status || "active",
-    });
-    setCreditFormSlugTouched(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const updateCreditFormStatus = async (item, nextStatus) => {
-    if (!nextStatus || nextStatus === item.status) return;
-
-    const { error } = await supabase
-      .from("credit_forms")
-      .update({ status: nextStatus })
-      .eq("id", item.id);
-
-    if (error) {
-      setMessage("Kredit forması statusu dəyişmədi: " + error.message);
-      return;
-    }
-
-    setMessage("Kredit forması statusu yeniləndi.");
-    loadData();
-  };
-
-  const deleteCreditForm = async (item) => {
-    const confirmed = window.confirm(
-      `"${item.name}" kredit formasını silmək istədiyinizə əminsiniz?`
+    const hiddenColumns = TABLE_COLUMNS.filter(
+      (column) => !visibleColumnKeys.includes(column.key)
     );
-    if (!confirmed) return;
 
-    const { error } = await supabase.from("credit_forms").delete().eq("id", item.id);
+    return [...visibleOrdered, ...hiddenColumns];
+  }, [visibleColumnKeys]);
 
-    if (error) {
-      setMessage("Kredit forması silinmədi: " + error.message);
-      return;
+  const filteredOrganizations = useMemo(() => {
+    if (organizationTypeFilter === "all") return organizations;
+    return organizations.filter(
+      (item) => String(item.organization_type_id) === String(organizationTypeFilter)
+    );
+  }, [organizations, organizationTypeFilter]);
+
+  const renderProductCommission = (item) => {
+    if (!item.has_commission || item.commission_type === "none") return "Yoxdur";
+
+    if (item.commission_type === "percent") {
+      return item.commission_percent !== null && item.commission_percent !== undefined
+        ? `${item.commission_percent} %`
+        : "-";
     }
 
-    if (editingCreditFormId === item.id) resetCreditFormEditor();
+    if (item.commission_type === "fixed") {
+      return item.commission_amount !== null && item.commission_amount !== undefined
+        ? `${formatNumber(item.commission_amount)} ${item.currency || "AZN"}`
+        : "-";
+    }
 
-    setMessage("Kredit forması silindi.");
-    loadData();
+    if (Number(item.commission_amount || 0) > 0) {
+      return `${formatNumber(item.commission_amount)} ${item.currency || "AZN"}`;
+    }
+
+    return "Yoxdur";
   };
 
-  const saveProduct = async (e) => {
-    e.preventDefault();
+  const renderRequirementSummary = (productId) => {
+    const relatedRequirements = requirementsByProductId[productId] || [];
+    if (!relatedRequirements.length) return "-";
 
-    if (!productForm.credit_form_id) {
-      setMessage("Kredit forması seçilməlidir.");
-      return;
-    }
+    return relatedRequirements
+      .map((req) => {
+        const definition = requirementTypes.find((item) => item.id === req.requirement_type_id);
+        if (!definition) return null;
 
-    if (!productForm.organization_type_id) {
-      setMessage("Təşkilat növü seçilməlidir.");
-      return;
-    }
+        if (req.value_boolean !== null && req.value_boolean !== undefined) {
+          return `${definition.name}: ${req.value_boolean ? "Bəli" : "Xeyr"}`;
+        }
 
-    if (!productForm.organization_id) {
-      setMessage("Təşkilat adı seçilməlidir.");
-      return;
-    }
+        if (req.value_number !== null && req.value_number !== undefined) {
+          return `${definition.name}: ${req.value_number}${definition.unit ? ` ${definition.unit}` : ""}`;
+        }
 
-    const finalProductName = productForm.product_name.trim();
+        if (req.value_text) {
+          return `${definition.name}: ${req.value_text}${definition.unit ? ` ${definition.unit}` : ""}`;
+        }
 
-    if (!finalProductName) {
-      setMessage("Məhsul adı boş ola bilməz.");
-      return;
-    }
+        return null;
+      })
+      .filter(Boolean)
+      .join(" | ");
+  };
 
-    setSavingProduct(true);
-    setMessage("");
+  const getCellValue = (columnKey, item) => {
+    const creditForm = creditFormMap[item.credit_form_id]?.name || "-";
+    const organizationType = typeMap[item.organization_type_id]?.name || "-";
+    const organization = orgMap[item.organization_id]?.name || "-";
 
-    const payload = {
-      credit_form_id: Number(productForm.credit_form_id),
-      organization_type_id: Number(productForm.organization_type_id),
-      organization_id: Number(productForm.organization_id),
-      product_type_id: null,
-      product_name: finalProductName,
-      currency: productForm.currency || "AZN",
-      min_amount: Number(productForm.min_amount || 0),
-      max_amount: Number(productForm.max_amount || 0),
-      min_term_months: Number(productForm.min_term_months || 1),
-      max_term_months: Number(productForm.max_term_months || 1),
-      min_interest:
-        productForm.min_interest === "" ? null : Number(productForm.min_interest),
-      default_interest:
-        productForm.default_interest === "" ? null : Number(productForm.default_interest),
-      max_interest:
-        productForm.max_interest === "" ? null : Number(productForm.max_interest),
-      has_commission: !!productForm.has_commission,
-      commission_amount: Number(productForm.commission_amount || 0),
-      status: productForm.status,
-      approval_status: productForm.approval_status,
-      is_active: !!productForm.is_active,
-      note: productForm.note.trim() || null,
-      updated_at: new Date().toISOString(),
+    const values = {
+      productName: item.product_name || "-",
+      creditForm,
+      organizationType,
+      organization,
+      currency: item.currency || "-",
+      amount: `${formatNumber(item.min_amount)} - ${formatNumber(item.max_amount)} ${item.currency || "AZN"}`,
+      term: `${item.min_term_months ?? "-"} - ${item.max_term_months ?? "-"} ay`,
+      interest: `${item.min_interest ?? "-"} / ${item.default_interest ?? "-"} / ${item.max_interest ?? "-"} %`,
+      commission: renderProductCommission(item),
+      status: getLabel(PRODUCT_STATUSES, item.status),
+      approval: getLabel(APPROVAL_STATUSES, item.approval_status),
+      active: item.is_active ? "Aktiv" : "Deaktiv",
+      requirements: renderRequirementSummary(item.id),
     };
 
-    const response = editingProductId
-      ? await supabase
-          .from("products")
-          .update(payload)
-          .eq("id", editingProductId)
-          .select()
-          .single()
-      : await supabase.from("products").insert([payload]).select().single();
-
-    if (response.error) {
-      setSavingProduct(false);
-      setMessage("Məhsul yadda saxlanmadı: " + response.error.message);
-      return;
-    }
-
-    const productId = response.data.id;
-
-    const deleteOldRequirements = await supabase
-      .from("product_requirements")
-      .delete()
-      .eq("product_id", productId);
-
-    if (deleteOldRequirements.error) {
-      setSavingProduct(false);
-      setMessage("Şərtlər yenilənmədi: " + deleteOldRequirements.error.message);
-      return;
-    }
-
-    const requirementPayloads = buildRequirementPayloads(productId);
-
-    if (requirementPayloads.length) {
-      const insertRequirements = await supabase
-        .from("product_requirements")
-        .insert(requirementPayloads);
-
-      if (insertRequirements.error) {
-        setSavingProduct(false);
-        setMessage("Şərtlər yadda saxlanmadı: " + insertRequirements.error.message);
-        return;
-      }
-    }
-
-    setSavingProduct(false);
-    setMessage(editingProductId ? "Məhsul yeniləndi." : "Məhsul əlavə olundu.");
-    resetProductForm();
-    loadData();
+    return values[columnKey] ?? "";
   };
 
-  const startEditProduct = (item) => {
-    const relatedRequirements = requirementsByProductId[item.id] || [];
-    const nextRequirementValues = {};
+  const filteredProducts = useMemo(() => {
+    return products.filter((item) => {
+      const query = search.trim().toLowerCase();
+      const creditFormName = creditFormMap[item.credit_form_id]?.name || "";
+      const organizationName = orgMap[item.organization_id]?.name || "";
 
-    relatedRequirements.forEach((req) => {
-      const key = String(req.requirement_type_id);
-      if (req.value_boolean !== null && req.value_boolean !== undefined) {
-        nextRequirementValues[key] = req.value_boolean;
-      } else if (req.value_number !== null && req.value_number !== undefined) {
-        nextRequirementValues[key] = String(req.value_number);
-      } else if (req.value_text !== null && req.value_text !== undefined) {
-        nextRequirementValues[key] = req.value_text;
+      const matchesSearch =
+        !query ||
+        (item.product_name || "").toLowerCase().includes(query) ||
+        organizationName.toLowerCase().includes(query) ||
+        creditFormName.toLowerCase().includes(query);
+
+      const matchesCreditForm =
+        creditFormFilter === "all" || String(item.credit_form_id) === String(creditFormFilter);
+
+      const matchesOrganizationType =
+        organizationTypeFilter === "all" ||
+        String(item.organization_type_id) === String(organizationTypeFilter);
+
+      const matchesOrganization =
+        organizationFilter === "all" || String(item.organization_id) === String(organizationFilter);
+
+      const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+      const matchesApproval =
+        approvalFilter === "all" || item.approval_status === approvalFilter;
+      const matchesActive =
+        activeFilter === "all" ||
+        (activeFilter === "active" ? item.is_active : !item.is_active);
+
+      return (
+        matchesSearch &&
+        matchesCreditForm &&
+        matchesOrganizationType &&
+        matchesOrganization &&
+        matchesStatus &&
+        matchesApproval &&
+        matchesActive
+      );
+    });
+  }, [
+    products,
+    search,
+    creditFormFilter,
+    organizationTypeFilter,
+    organizationFilter,
+    statusFilter,
+    approvalFilter,
+    activeFilter,
+    creditFormMap,
+    orgMap,
+  ]);
+
+  const visibleProducts = useMemo(
+    () => filteredProducts.slice(0, Number(rowLimit)),
+    [filteredProducts, rowLimit]
+  );
+
+  const toggleColumn = (columnKey) => {
+    setVisibleColumnKeys((prev) => {
+      if (prev.includes(columnKey)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((key) => key !== columnKey);
       }
-    });
 
-    setEditingProductId(item.id);
-    setProductForm({
-      credit_form_id: item.credit_form_id ? String(item.credit_form_id) : "",
-      organization_type_id: item.organization_type_id ? String(item.organization_type_id) : "",
-      organization_id: item.organization_id ? String(item.organization_id) : "",
-      product_name: item.product_name || "",
-      currency: item.currency || "AZN",
-      min_amount: item.min_amount ?? "",
-      max_amount: item.max_amount ?? "",
-      min_term_months: item.min_term_months ?? "",
-      max_term_months: item.max_term_months ?? "",
-      min_interest: item.min_interest ?? "",
-      default_interest: item.default_interest ?? "",
-      max_interest: item.max_interest ?? "",
-      has_commission: !!item.has_commission,
-      commission_amount: item.commission_amount ?? "",
-      status: item.status || "draft",
-      approval_status: item.approval_status || "pending",
-      is_active: item.is_active ?? true,
-      note: item.note || "",
+      return [...prev, columnKey];
     });
-    setRequirementValues(nextRequirementValues);
-    setProductNameTouched(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const moveColumn = (columnKey, direction) => {
+    setVisibleColumnKeys((prev) => {
+      const currentIndex = prev.indexOf(columnKey);
+      if (currentIndex === -1) return prev;
+
+      const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      if (nextIndex < 0 || nextIndex >= prev.length) return prev;
+
+      const next = [...prev];
+      const temp = next[currentIndex];
+      next[currentIndex] = next[nextIndex];
+      next[nextIndex] = temp;
+
+      return next;
+    });
+  };
+
+  const selectAllColumns = () => {
+    setVisibleColumnKeys(DEFAULT_VISIBLE_COLUMNS);
+  };
+
+  const resetColumns = () => {
+    setVisibleColumnKeys(DEFAULT_VISIBLE_COLUMNS);
   };
 
   const updateProductStatus = async (item, nextStatus) => {
@@ -599,10 +484,7 @@ export default function ProductsPage() {
 
     const { error } = await supabase
       .from("products")
-      .update({
-        status: nextStatus,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ status: nextStatus, updated_at: new Date().toISOString() })
       .eq("id", item.id);
 
     if (error) {
@@ -619,10 +501,7 @@ export default function ProductsPage() {
 
     const { error } = await supabase
       .from("products")
-      .update({
-        approval_status: nextStatus,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ approval_status: nextStatus, updated_at: new Date().toISOString() })
       .eq("id", item.id);
 
     if (error) {
@@ -647,1019 +526,778 @@ export default function ProductsPage() {
       return;
     }
 
-    if (editingProductId === item.id) resetProductForm();
-
     setMessage("Məhsul silindi.");
     loadData();
   };
 
-  const renderRequirementInput = (requirement) => {
-    const key = String(requirement.id);
-    const value = requirementValues[key];
-    const inputType = requirement.input_type || "boolean";
+  const renderCell = (columnKey, item) => {
+    if (columnKey === "productName") return item.product_name || "-";
 
-    if (inputType === "boolean") {
+    if (columnKey === "status") {
       return (
-        <label key={requirement.id} style={styles.checkboxCard}>
-          <input
-            type="checkbox"
-            checked={!!value}
-            onChange={(e) => handleRequirementValueChange(requirement, e.target.checked)}
-          />
-          <span>{requirement.name}</span>
-        </label>
+        <select
+          value={item.status || "draft"}
+          onChange={(e) => updateProductStatus(item, e.target.value)}
+          style={styles.statusSelect}
+          aria-label="Product status"
+        >
+          {PRODUCT_STATUSES.map((status) => (
+            <option key={status.value} value={status.value}>
+              {status.label}
+            </option>
+          ))}
+        </select>
       );
     }
 
-    if (inputType === "select") {
-      const options = safeJsonParse(requirement.options_json);
+    if (columnKey === "approval") {
       return (
-        <div key={requirement.id}>
-          <label style={styles.label}>
-            {requirement.name}
-            {requirement.unit ? ` (${requirement.unit})` : ""}
-          </label>
-          <select
-            style={styles.select}
-            value={value || ""}
-            onChange={(e) => handleRequirementValueChange(requirement, e.target.value)}
-          >
-            <option value="">Seçin</option>
-            {options.map((option, idx) => {
-              const optionValue =
-                typeof option === "string"
-                  ? option
-                  : option?.value || option?.label || `opt-${idx}`;
-              const optionLabel =
-                typeof option === "string"
-                  ? option
-                  : option?.label || option?.value || `Variant ${idx + 1}`;
-              return (
-                <option key={optionValue} value={optionValue}>
-                  {optionLabel}
-                </option>
-              );
-            })}
-          </select>
+        <select
+          value={item.approval_status || "pending"}
+          onChange={(e) => updateProductApproval(item, e.target.value)}
+          style={styles.statusSelect}
+          aria-label="Approval status"
+        >
+          {APPROVAL_STATUSES.map((status) => (
+            <option key={status.value} value={status.value}>
+              {status.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (columnKey === "active") {
+      return (
+        <span style={getBadgeStyle(item.is_active ? "active" : "inactive")}>
+          {item.is_active ? "Aktiv" : "Deaktiv"}
+        </span>
+      );
+    }
+
+    if (columnKey === "requirements") {
+      return (
+        <span title={renderRequirementSummary(item.id)} style={styles.ellipsisCell}>
+          {renderRequirementSummary(item.id)}
+        </span>
+      );
+    }
+
+    if (columnKey === "action") {
+      return (
+        <div style={styles.actionGroup}>
+          <Link href={`/admin/products/settings?edit=${item.id}`} style={styles.editBtn}>
+            Edit
+          </Link>
+          <button type="button" onClick={() => deleteProduct(item)} style={styles.deleteBtn}>
+            Sil
+          </button>
         </div>
       );
     }
 
-    return (
-      <div key={requirement.id}>
-        <label style={styles.label}>
-          {requirement.name}
-          {requirement.unit ? ` (${requirement.unit})` : ""}
-        </label>
-        <input
-          type={inputType === "number" ? "number" : "text"}
-          step={inputType === "number" ? "0.01" : undefined}
-          style={styles.input}
-          placeholder={requirement.placeholder || ""}
-          value={value || ""}
-          onChange={(e) => handleRequirementValueChange(requirement, e.target.value)}
-        />
-      </div>
-    );
+    return getCellValue(columnKey, item) || "-";
   };
 
-  const renderRequirementSummary = (productId) => {
-    const relatedRequirements = requirementsByProductId[productId] || [];
-    if (!relatedRequirements.length) return "-";
-
-    const parts = relatedRequirements.map((req) => {
-      const definition = requirementTypes.find((item) => item.id === req.requirement_type_id);
-      if (!definition) return null;
-
-      let valueLabel = "-";
-
-      if (req.value_boolean !== null && req.value_boolean !== undefined) {
-        valueLabel = req.value_boolean ? "Bəli" : "Xeyr";
-      } else if (req.value_number !== null && req.value_number !== undefined) {
-        valueLabel = `${req.value_number}${definition.unit ? ` ${definition.unit}` : ""}`;
-      } else if (req.value_text) {
-        valueLabel = `${req.value_text}${definition.unit ? ` ${definition.unit}` : ""}`;
-      }
-
-      return `${definition.name}: ${valueLabel}`;
-    });
-
-    return parts.filter(Boolean).join(" • ");
-  };
+  if (loading) {
+    return <div style={styles.loadingBox}>Yüklənir...</div>;
+  }
 
   return (
     <div>
       <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Məhsullar</h1>
-          <p style={styles.subtitle}>
-            Kredit forması, təşkilat bağlılığı, məhsullar və dinamik kredit şərtlərini buradan idarə et.
-          </p>
-        </div>
+        <h1 style={styles.title}>Məhsullar</h1>
+        <p style={styles.subtitle}>
+          Məhsulları filterlə, status və approval vəziyyətini idarə et, görünən nəticələri export et.
+        </p>
       </div>
 
       {message ? <div style={styles.messageBox}>{message}</div> : null}
 
-      <div style={styles.topGrid}>
-        <section style={styles.panel}>
-          <div style={styles.panelHeader}>
-            <h2 style={styles.panelTitle}>
-              {editingCreditFormId ? "Kredit formasını redaktə et" : "Kredit forması əlavə et"}
-            </h2>
-            <p style={styles.panelDesc}>
-              “Fərdi kredit”, “Biznes krediti” kimi əsas kredit formalarını buradan idarə et.
-            </p>
-          </div>
+      <div style={styles.panel}>
+        <div style={styles.filters}>
+          <input
+            placeholder="Məhsul, təşkilat və ya kredit forması axtar"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={styles.input}
+          />
 
-          <form onSubmit={saveCreditForm}>
-            <div style={styles.formGrid}>
-              <div>
-                <label style={styles.label}>Kredit forması adı</label>
-                <input
-                  style={styles.input}
-                  placeholder="Məsələn: Fərdi kredit"
-                  value={creditFormEditor.name}
-                  onChange={(e) => handleCreditFormNameChange(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Slug / sistem açarı</label>
-                <input
-                  style={styles.input}
-                  placeholder="Meselen: ferdi-kredit"
-                  value={creditFormEditor.slug}
-                  onChange={(e) => handleCreditFormSlugChange(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div style={styles.singleField}>
-              <label style={styles.label}>Status</label>
-              <select
-                style={styles.select}
-                value={creditFormEditor.status}
-                onChange={(e) =>
-                  setCreditFormEditor((prev) => ({ ...prev, status: e.target.value }))
-                }
-              >
-                {CREDIT_FORM_STATUSES.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.actionRow}>
-              <button type="submit" style={styles.primaryButton} disabled={savingCreditForm}>
-                {savingCreditForm
-                  ? "Yadda saxlanır..."
-                  : editingCreditFormId
-                  ? "Kredit formasını yenilə"
-                  : "Kredit forması əlavə et"}
-              </button>
-
-              {editingCreditFormId ? (
-                <button type="button" style={styles.secondaryButton} onClick={resetCreditFormEditor}>
-                  Ləğv et
-                </button>
-              ) : null}
-            </div>
-          </form>
-
-          <div style={styles.sectionTitle}>Mövcud kredit formaları</div>
-
-          <div style={styles.stack}>
+          <select
+            value={creditFormFilter}
+            onChange={(e) => setCreditFormFilter(e.target.value)}
+            style={styles.select}
+          >
+            <option value="all">Bütün kredit formaları</option>
             {creditForms.map((item) => (
-              <div key={item.id} style={styles.typeCard}>
-                <div style={styles.cardTop}>
-                  <div>
-                    <div style={styles.cardTitle}>{item.name}</div>
-                    <div style={styles.cardSub}>Slug: {item.slug || "-"}</div>
-                  </div>
-
-                  <span style={getBadgeStyle(item.status)}>
-                    {getLabel(CREDIT_FORM_STATUSES, item.status)}
-                  </span>
-                </div>
-
-                <div style={styles.inlineActions}>
-                  <button
-                    type="button"
-                    style={styles.secondaryButton}
-                    onClick={() => startEditCreditForm(item)}
-                  >
-                    Edit et
-                  </button>
-                  <select
-                    value={item.status || "active"}
-                    onChange={(e) => updateCreditFormStatus(item, e.target.value)}
-                    style={styles.statusSelect}
-                    aria-label="Credit form status"
-                  >
-                    {CREDIT_FORM_STATUSES.map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    style={styles.deleteButton}
-                    onClick={() => deleteCreditForm(item)}
-                  >
-                    Sil
-                  </button>
-                </div>
-              </div>
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
             ))}
+          </select>
 
-            {!creditForms.length && !loading ? (
-              <div style={styles.emptyBox}>Hələ kredit forması yoxdur.</div>
-            ) : null}
+          <select
+            value={organizationTypeFilter}
+            onChange={(e) => {
+              setOrganizationTypeFilter(e.target.value);
+              setOrganizationFilter("all");
+            }}
+            style={styles.select}
+          >
+            <option value="all">Bütün təşkilat növləri</option>
+            {organizationTypes.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={organizationFilter}
+            onChange={(e) => setOrganizationFilter(e.target.value)}
+            style={styles.select}
+          >
+            <option value="all">Bütün təşkilatlar</option>
+            {filteredOrganizations.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={styles.select}>
+            <option value="all">Bütün statuslar</option>
+            {PRODUCT_STATUSES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+
+          <select value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value)} style={styles.select}>
+            <option value="all">Bütün approval</option>
+            {APPROVAL_STATUSES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+
+          <select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)} style={styles.select}>
+            {ACTIVE_FILTERS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={styles.toolbar}>
+          <div style={styles.resultText}>
+            Tapıldı: <strong>{filteredProducts.length}</strong> məhsul
           </div>
-        </section>
 
-        <section style={styles.panel}>
-          <div style={styles.panelHeader}>
-            <h2 style={styles.panelTitle}>
-              {editingProductId ? "Məhsulu redaktə et" : "Məhsul əlavə et"}
-            </h2>
-            <p style={styles.panelDesc}>
-              Kredit forması → təşkilat növü → təşkilat → məhsul zəncirinə uyğun məhsul yarat.
-            </p>
-          </div>
+          <div style={styles.toolbarActions}>
+            <label style={styles.showLabel}>Göstər</label>
+            <select value={rowLimit} onChange={(e) => setRowLimit(e.target.value)} style={styles.smallSelect}>
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
 
-          <form onSubmit={saveProduct}>
-            <div style={styles.groupTitle}>Əsas bağlılıq məlumatları</div>
+            <button
+              type="button"
+              onClick={() => setColumnPanelOpen(true)}
+              style={styles.columnBtn}
+            >
+              Sütun seç
+            </button>
 
-            <div style={styles.formGrid}>
-              <div>
-                <label style={styles.label}>Kredit forması</label>
-                <select
-                  style={styles.select}
-                  value={productForm.credit_form_id}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      credit_form_id: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Seçin</option>
-                  {creditForms.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={styles.label}>Təşkilat növü</label>
-                <select
-                  style={styles.select}
-                  value={productForm.organization_type_id}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      organization_type_id: e.target.value,
-                      organization_id: "",
-                    }))
-                  }
-                >
-                  <option value="">Seçin</option>
-                  {organizationTypes.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={styles.label}>Təşkilat adı</label>
-                <select
-                  style={styles.select}
-                  value={productForm.organization_id}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      organization_id: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Seçin</option>
-                  {filteredOrganizations.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.fullWidth}>
-                <label style={styles.label}>Məhsul adı</label>
-                <input
-                  style={styles.input}
-                  placeholder="Məsələn: İstehlak krediti"
-                  value={productForm.product_name}
-                  onChange={(e) => {
-                    setProductNameTouched(true);
-                    setProductForm((prev) => ({
-                      ...prev,
-                      product_name: e.target.value,
-                    }));
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={styles.groupTitle}>Kredit detalları</div>
-
-            <div style={styles.formGrid}>
-              <div>
-                <label style={styles.label}>Valyuta</label>
-                <select
-                  style={styles.select}
-                  value={productForm.currency}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      currency: e.target.value,
-                    }))
-                  }
-                >
-                  {CURRENCIES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={styles.label}>Minimum məbləğ</label>
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={productForm.min_amount}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      min_amount: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Maksimum məbləğ</label>
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={productForm.max_amount}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      max_amount: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Minimum müddət (ay)</label>
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={productForm.min_term_months}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      min_term_months: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Maksimum müddət (ay)</label>
-                <input
-                  type="number"
-                  style={styles.input}
-                  value={productForm.max_term_months}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      max_term_months: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-
-            <div style={styles.groupTitle}>Faiz və komissiya</div>
-
-            <div style={styles.formGrid}>
-              <div>
-                <label style={styles.label}>Minimum faiz (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  style={styles.input}
-                  value={productForm.min_interest}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      min_interest: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Default faiz (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  style={styles.input}
-                  value={productForm.default_interest}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      default_interest: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Maksimum faiz (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  style={styles.input}
-                  value={productForm.max_interest}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      max_interest: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Komissiya məbləği</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  style={styles.input}
-                  value={productForm.commission_amount}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      commission_amount: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-
-            <div style={styles.checkboxGrid}>
-              <label style={styles.checkboxCard}>
-                <input
-                  type="checkbox"
-                  checked={productForm.has_commission}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      has_commission: e.target.checked,
-                    }))
-                  }
-                />
-                <span>Komissiya var</span>
-              </label>
-            </div>
-
-            <div style={styles.groupTitle}>Dinamik şərtlər / ilkin tələblər</div>
-
-            <div style={styles.checkboxGrid}>
-              {activeRequirementTypes
-                .filter((item) => item.input_type === "boolean")
-                .map((item) => renderRequirementInput(item))}
-            </div>
-
-            <div style={styles.formGrid}>
-              {activeRequirementTypes
-                .filter((item) => item.input_type !== "boolean")
-                .map((item) => renderRequirementInput(item))}
-            </div>
-
-            <div style={styles.groupTitle}>Status və qeyd</div>
-
-            <div style={styles.formGrid}>
-              <div>
-                <label style={styles.label}>Status</label>
-                <select
-                  style={styles.select}
-                  value={productForm.status}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      status: e.target.value,
-                    }))
-                  }
-                >
-                  {PRODUCT_STATUSES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={styles.label}>Approval status</label>
-                <select
-                  style={styles.select}
-                  value={productForm.approval_status}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      approval_status: e.target.value,
-                    }))
-                  }
-                >
-                  {APPROVAL_STATUSES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div style={styles.checkboxGrid}>
-              <label style={styles.checkboxCard}>
-                <input
-                  type="checkbox"
-                  checked={productForm.is_active}
-                  onChange={(e) =>
-                    setProductForm((prev) => ({
-                      ...prev,
-                      is_active: e.target.checked,
-                    }))
-                  }
-                />
-                <span>Aktivdir</span>
-              </label>
-            </div>
-
-            <div style={styles.singleField}>
-              <label style={styles.label}>Qeyd</label>
-              <textarea
-                style={styles.textarea}
-                placeholder="Məhsul haqqında əlavə qeyd"
-                value={productForm.note}
-                onChange={(e) =>
-                  setProductForm((prev) => ({
-                    ...prev,
-                    note: e.target.value,
-                  }))
-                }
-              />
-            </div>
-
-            <div style={styles.actionRow}>
-              <button type="submit" style={styles.primaryButton} disabled={savingProduct}>
-                {savingProduct
-                  ? "Yadda saxlanır..."
-                  : editingProductId
-                  ? "Məhsulu yenilə"
-                  : "Məhsul əlavə et"}
+            <div style={styles.exportWrap}>
+              <button
+                type="button"
+                onClick={() => setExportOpen((prev) => !prev)}
+                style={styles.exportBtn}
+              >
+                Export
               </button>
 
-              {editingProductId ? (
-                <button
-                  type="button"
-                  style={styles.secondaryButton}
-                  onClick={resetProductForm}
-                >
-                  Ləğv et
-                </button>
+              {exportOpen ? (
+                <div style={styles.exportMenu}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportOpen(false);
+                      window.print();
+                    }}
+                    style={styles.exportMenuItem}
+                  >
+                    Çap / PDF
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportOpen(false);
+                      copyRows(visibleProducts, visibleColumns, getCellValue, setMessage);
+                    }}
+                    style={styles.exportMenuItem}
+                  >
+                    Kopyala
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportOpen(false);
+                      downloadCsv(visibleProducts, visibleColumns, getCellValue);
+                    }}
+                    style={styles.exportMenuItem}
+                  >
+                    CSV
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportOpen(false);
+                      downloadExcel(visibleProducts, visibleColumns, getCellValue);
+                    }}
+                    style={styles.exportMenuItem}
+                  >
+                    Excel file
+                  </button>
+                </div>
               ) : null}
             </div>
-          </form>
-        </section>
+          </div>
+        </div>
+
+        <div style={styles.tableWrap}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                {visibleColumns.map((column) => (
+                  <th key={column.key} style={styles.th}>
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {visibleProducts.map((item) => (
+                <tr key={item.id}>
+                  {visibleColumns.map((column) => (
+                    <td
+                      key={column.key}
+                      style={column.key === "productName" ? styles.tdStrong : styles.td}
+                    >
+                      {renderCell(column.key, item)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {!visibleProducts.length ? <div style={styles.emptyBox}>Uyğun məhsul tapılmadı.</div> : null}
+        </div>
       </div>
 
-      <section style={styles.bottomPanel}>
-        <div style={styles.panelHeader}>
-          <h2 style={styles.panelTitle}>Mövcud məhsullar</h2>
-          <p style={styles.panelDesc}>
-            Əlavə olunmuş məhsulları redaktə et, statusunu və approval vəziyyətini dəyiş.
-          </p>
-        </div>
-
-        {loading ? <div style={styles.emptyBox}>Yüklənir...</div> : null}
-
-        <div style={styles.orgList}>
-          {products.map((item) => (
-            <div key={item.id} style={styles.orgCard}>
-              <div style={styles.cardTop}>
-                <div>
-                  <div style={styles.orgTitle}>{item.product_name}</div>
-                  <div style={styles.cardSub}>
-                    {creditFormMap[item.credit_form_id]?.name || "-"} •{" "}
-                    {typeMap[item.organization_type_id]?.name || "-"} •{" "}
-                    {orgMap[item.organization_id]?.name || "-"}
-                  </div>
-                </div>
-
-                <div style={styles.badgeRow}>
-                  <span style={getBadgeStyle(item.status)}>
-                    {getLabel(PRODUCT_STATUSES, item.status)}
-                  </span>
-                  <span style={getBadgeStyle(item.approval_status)}>
-                    {getLabel(APPROVAL_STATUSES, item.approval_status)}
-                  </span>
-                </div>
+      {columnPanelOpen ? (
+        <div style={styles.modalBackdrop}>
+          <div style={styles.modal}>
+            <div style={styles.modalHeader}>
+              <div>
+                <h2 style={styles.modalTitle}>Sütun seçimi</h2>
+                <p style={styles.modalSubtitle}>
+                  Məhsullar cədvəlində görünəcək sütunları seçin və sıralayın.
+                </p>
               </div>
 
-              <div style={styles.infoGrid}>
-                <div>
-                  <strong>Valyuta:</strong> {item.currency || "-"}
-                </div>
-                <div>
-                  <strong>Faiz:</strong> {item.min_interest ?? "-"} / {item.default_interest ?? "-"} /{" "}
-                  {item.max_interest ?? "-"} %
-                </div>
-                <div>
-                  <strong>Məbləğ:</strong> {formatNumber(item.min_amount)} -{" "}
-                  {formatNumber(item.max_amount)} {item.currency || "AZN"}
-                </div>
-                <div>
-                  <strong>Müddət:</strong> {item.min_term_months} - {item.max_term_months} ay
-                </div>
-                <div>
-                  <strong>Komissiya:</strong>{" "}
-                  {item.has_commission
-                    ? `${formatNumber(item.commission_amount)} ${item.currency || "AZN"}`
-                    : "Yoxdur"}
-                </div>
-                <div>
-                  <strong>Aktivlik:</strong> {item.is_active ? "Aktiv" : "Deaktiv"}
-                </div>
-                <div>
-                  <strong>Şərtlər:</strong> {renderRequirementSummary(item.id)}
-                </div>
-                <div>
-                  <strong>Qeyd:</strong> {item.note || "-"}
-                </div>
-              </div>
-
-              <div style={styles.inlineActions}>
-                <button
-                  type="button"
-                  style={styles.secondaryButton}
-                  onClick={() => startEditProduct(item)}
-                >
-                  Edit et
-                </button>
-                <select
-                  value={item.status || "draft"}
-                  onChange={(e) => updateProductStatus(item, e.target.value)}
-                  style={styles.statusSelect}
-                  aria-label="Product status"
-                >
-                  {PRODUCT_STATUSES.map((status) => (
-                    <option key={status.value} value={status.value}>
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={item.approval_status || "pending"}
-                  onChange={(e) => updateProductApproval(item, e.target.value)}
-                  style={styles.statusSelect}
-                  aria-label="Approval status"
-                >
-                  {APPROVAL_STATUSES.map((status) => (
-                    <option key={status.value} value={status.value}>
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  style={styles.deleteButton}
-                  onClick={() => deleteProduct(item)}
-                >
-                  Sil
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setColumnPanelOpen(false)}
+                style={styles.modalClose}
+              >
+                ×
+              </button>
             </div>
-          ))}
 
-          {!products.length && !loading ? (
-            <div style={styles.emptyBox}>Hələ məhsul əlavə olunmayıb.</div>
-          ) : null}
+            <div style={styles.columnsGrid}>
+              {orderedColumnsForPanel.map((column) => {
+                const isVisible = visibleColumnKeys.includes(column.key);
+                const visibleIndex = visibleColumnKeys.indexOf(column.key);
+
+                return (
+                  <div
+                    key={column.key}
+                    style={{
+                      ...styles.columnOptionRow,
+                      ...(!isVisible ? styles.columnOptionRowHidden : {}),
+                    }}
+                  >
+                    <label style={styles.columnOption}>
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        onChange={() => toggleColumn(column.key)}
+                        style={styles.checkbox}
+                      />
+                      <span>{column.label}</span>
+                    </label>
+
+                    <div style={styles.columnMoveActions}>
+                      <button
+                        type="button"
+                        onClick={() => moveColumn(column.key, "up")}
+                        disabled={!isVisible || visibleIndex <= 0}
+                        style={{
+                          ...styles.moveBtn,
+                          ...(!isVisible || visibleIndex <= 0 ? styles.moveBtnDisabled : {}),
+                        }}
+                      >
+                        ↑
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => moveColumn(column.key, "down")}
+                        disabled={!isVisible || visibleIndex === visibleColumnKeys.length - 1}
+                        style={{
+                          ...styles.moveBtn,
+                          ...(!isVisible || visibleIndex === visibleColumnKeys.length - 1
+                            ? styles.moveBtnDisabled
+                            : {}),
+                        }}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={styles.modalFooter}>
+              <div style={styles.modalFooterLeft}>
+                <button type="button" onClick={selectAllColumns} style={styles.secondaryBtn}>
+                  Hamısını seç
+                </button>
+
+                <button type="button" onClick={resetColumns} style={styles.secondaryBtn}>
+                  Sıfırla
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setColumnPanelOpen(false)}
+                style={styles.primaryBtn}
+              >
+                Təsdiq et
+              </button>
+            </div>
+          </div>
         </div>
-      </section>
+      ) : null}
     </div>
   );
 }
 
 const styles = {
+  loadingBox: {
+    padding: "40px",
+    fontSize: "15px",
+    color: "#475569",
+  },
   header: {
     marginBottom: "24px",
   },
   title: {
     margin: 0,
     fontSize: "56px",
-    lineHeight: 1.05,
-    fontWeight: 900,
-    letterSpacing: "-0.03em",
+    fontWeight: 700,
     color: "#0f172a",
   },
   subtitle: {
     marginTop: "10px",
-    marginBottom: 0,
     fontSize: "16px",
     color: "#475569",
-    maxWidth: "900px",
-    lineHeight: 1.6,
+    lineHeight: 1.7,
   },
   messageBox: {
     background: "#f8fafc",
-    color: "#334155",
     border: "1px solid #dbe4ee",
     borderRadius: "18px",
     padding: "14px 16px",
     marginBottom: "18px",
     fontSize: "14px",
-  },
-  topGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-    gap: "20px",
-    alignItems: "start",
+    color: "#334155",
   },
   panel: {
     background: "#ffffff",
     border: "1px solid #dbe4ee",
     borderRadius: "28px",
     padding: "22px",
-    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
   },
-  bottomPanel: {
-    marginTop: "20px",
-    background: "#ffffff",
-    border: "1px solid #dbe4ee",
-    borderRadius: "28px",
-    padding: "22px",
-    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
-  },
-  panelHeader: {
-    marginBottom: "16px",
-  },
-  panelTitle: {
-    margin: 0,
-    fontSize: "30px",
-    lineHeight: 1.15,
-    fontWeight: 850,
-    color: "#0f172a",
-    letterSpacing: "-0.02em",
-  },
-  panelDesc: {
-    margin: "8px 0 0",
-    fontSize: "14px",
-    color: "#64748b",
-    lineHeight: 1.6,
-  },
-  sectionTitle: {
-    marginTop: "22px",
-    marginBottom: "12px",
-    fontSize: "14px",
-    fontWeight: 800,
-    color: "#047857",
-  },
-  groupTitle: {
-    marginTop: "20px",
-    marginBottom: "12px",
-    fontSize: "15px",
-    fontWeight: 800,
-    color: "#0f172a",
-  },
-  formGrid: {
+  filters: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "14px",
-  },
-  fullWidth: {
-    gridColumn: "1 / -1",
-  },
-  singleField: {
-    marginTop: "14px",
-  },
-  label: {
-    display: "block",
-    marginBottom: "8px",
-    fontSize: "14px",
-    fontWeight: 700,
-    color: "#0f172a",
+    marginBottom: "18px",
   },
   input: {
-    width: "100%",
-    height: "48px",
-    boxSizing: "border-box",
-    borderRadius: "16px",
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
+    minHeight: "46px",
+    borderRadius: "14px",
+    border: "1px solid #dbe4ee",
     padding: "0 14px",
-    fontSize: "15px",
-    color: "#0f172a",
+    fontSize: "14px",
     outline: "none",
+    fontFamily: "inherit",
   },
   select: {
-    width: "100%",
-    height: "48px",
-    boxSizing: "border-box",
-    borderRadius: "16px",
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
+    minHeight: "46px",
+    borderRadius: "14px",
+    border: "1px solid #dbe4ee",
     padding: "0 14px",
-    fontSize: "15px",
-    color: "#0f172a",
-    outline: "none",
-  },
-  textarea: {
-    width: "100%",
-    minHeight: "110px",
-    boxSizing: "border-box",
-    borderRadius: "16px",
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
-    padding: "14px",
-    fontSize: "15px",
-    color: "#0f172a",
-    outline: "none",
-    resize: "vertical",
-  },
-  checkboxGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "12px",
-    marginTop: "14px",
-  },
-  checkboxCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    padding: "14px 16px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "16px",
     fontSize: "14px",
-    color: "#0f172a",
-    fontWeight: 600,
+    outline: "none",
+    background: "#ffffff",
+    fontFamily: "inherit",
   },
-  actionRow: {
+  toolbar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+    marginBottom: "14px",
+  },
+  resultText: {
+    fontSize: "14px",
+    color: "#475569",
+  },
+  toolbarActions: {
     display: "flex",
     gap: "10px",
     flexWrap: "wrap",
-    marginTop: "18px",
+    alignItems: "center",
   },
-  primaryButton: {
-    background: "#059669",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "14px",
-    padding: "12px 18px",
+  showLabel: {
     fontSize: "14px",
-    fontWeight: 700,
-    cursor: "pointer",
+    color: "#334155",
   },
-  secondaryButton: {
+  smallSelect: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #dbe4ee",
+    padding: "0 12px",
+    fontSize: "13px",
+    background: "#ffffff",
+    fontFamily: "inherit",
+  },
+  columnBtn: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
     background: "#ffffff",
     color: "#0f172a",
-    border: "1px solid #cbd5e1",
-    borderRadius: "14px",
-    padding: "12px 18px",
-    fontSize: "14px",
+    padding: "0 16px",
+    fontSize: "13px",
     fontWeight: 700,
     cursor: "pointer",
+    fontFamily: "inherit",
   },
-  statusSelect: {
-    minHeight: "42px",
-    minWidth: "150px",
+  exportWrap: {
+    position: "relative",
+  },
+  exportBtn: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
     background: "#ffffff",
     color: "#0f172a",
+    padding: "0 16px",
+    fontSize: "13px",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  exportMenu: {
+    position: "absolute",
+    right: 0,
+    top: "46px",
+    width: "170px",
+    background: "#ffffff",
     border: "1px solid #cbd5e1",
     borderRadius: "14px",
+    padding: "6px",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.16)",
+    zIndex: 20,
+  },
+  exportMenuItem: {
+    width: "100%",
+    minHeight: "38px",
+    border: "0",
+    borderRadius: "10px",
+    background: "#ffffff",
+    textAlign: "left",
     padding: "0 12px",
     fontSize: "14px",
-    fontWeight: 700,
+    fontWeight: 600,
+    color: "#334155",
     cursor: "pointer",
-    outline: "none",
+    fontFamily: "inherit",
   },
-  deleteButton: {
-    background: "#ffffff",
-    color: "#b91c1c",
-    border: "1px solid #fecaca",
-    borderRadius: "14px",
-    padding: "12px 18px",
-    fontSize: "14px",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  stack: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "14px",
-  },
-  typeCard: {
-    background: "#f8fafc",
+  tableWrap: {
+    overflowX: "auto",
     border: "1px solid #e2e8f0",
-    borderRadius: "22px",
-    padding: "18px",
+    borderRadius: "20px",
   },
-  cardTop: {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: "12px",
-    marginBottom: "14px",
-    flexWrap: "wrap",
+  table: {
+    width: "100%",
+    minWidth: "1500px",
+    borderCollapse: "collapse",
   },
-  cardTitle: {
-    fontSize: "18px",
-    fontWeight: 800,
-    color: "#0f172a",
-    marginBottom: "6px",
+  th: {
+    textAlign: "left",
+    padding: "13px 14px",
+    background: "#f8fafc",
+    fontSize: "13px",
+    fontWeight: 700,
+    borderBottom: "1px solid #e2e8f0",
+    borderRight: "1px solid #e2e8f0",
+    whiteSpace: "nowrap",
   },
-  cardSub: {
+  td: {
+    padding: "12px 14px",
     fontSize: "14px",
-    color: "#64748b",
-    lineHeight: 1.5,
+    borderBottom: "1px solid #eef2f7",
+    borderRight: "1px solid #eef2f7",
+    whiteSpace: "nowrap",
+    color: "#334155",
+  },
+  tdStrong: {
+    padding: "12px 14px",
+    fontSize: "14px",
+    fontWeight: 700,
+    borderBottom: "1px solid #eef2f7",
+    borderRight: "1px solid #eef2f7",
+    whiteSpace: "nowrap",
+    color: "#0f172a",
+  },
+  ellipsisCell: {
+    display: "inline-block",
+    maxWidth: "260px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    verticalAlign: "bottom",
   },
   badge: {
+    padding: "8px 12px",
+    borderRadius: "999px",
+    fontSize: "13px",
+    fontWeight: 600,
+    display: "inline-block",
+  },
+  statusSelect: {
+    minHeight: "38px",
+    minWidth: "132px",
+    borderRadius: "12px",
+    border: "1px solid #dbe4ee",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 10px",
+    fontSize: "13px",
+    fontWeight: 600,
+    outline: "none",
+    fontFamily: "inherit",
+  },
+  actionGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  editBtn: {
+    minHeight: "36px",
+    borderRadius: "11px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 12px",
+    fontSize: "13px",
+    fontWeight: 700,
+    textDecoration: "none",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "32px",
+  },
+  deleteBtn: {
+    minHeight: "36px",
+    borderRadius: "11px",
+    border: "1px solid #fecaca",
+    background: "#ffffff",
+    color: "#b91c1c",
     padding: "0 12px",
-    borderRadius: "999px",
     fontSize: "13px",
     fontWeight: 700,
-    whiteSpace: "nowrap",
+    cursor: "pointer",
+    fontFamily: "inherit",
   },
-  inlineActions: {
+  emptyBox: {
+    padding: "20px",
+    fontSize: "14px",
+    color: "#64748b",
+  },
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15, 23, 42, 0.45)",
+    zIndex: 100,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+  },
+  modal: {
+    width: "min(760px, 100%)",
+    maxHeight: "90vh",
+    background: "#ffffff",
+    borderRadius: "24px",
+    border: "1px solid #dbe4ee",
+    boxShadow: "0 30px 80px rgba(15, 23, 42, 0.25)",
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+  },
+  modalHeader: {
+    padding: "20px 22px",
+    borderBottom: "1px solid #e2e8f0",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    flexShrink: 0,
+  },
+  modalTitle: {
+    margin: 0,
+    fontSize: "22px",
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  modalSubtitle: {
+    margin: "6px 0 0",
+    fontSize: "14px",
+    color: "#64748b",
+  },
+  modalClose: {
+    width: "38px",
+    height: "38px",
+    borderRadius: "12px",
+    border: "1px solid #dbe4ee",
+    background: "#ffffff",
+    fontSize: "28px",
+    lineHeight: 1,
+    cursor: "pointer",
+    color: "#64748b",
+    flexShrink: 0,
+  },
+  columnsGrid: {
+    padding: "22px",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: "14px",
+    overflowY: "auto",
+    flex: 1,
+    minHeight: 0,
+  },
+  columnOptionRow: {
+    minHeight: "44px",
+    border: "1px solid #e2e8f0",
+    borderRadius: "14px",
+    padding: "0 10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+    background: "#ffffff",
+  },
+  columnOptionRowHidden: {
+    opacity: 0.55,
+  },
+  columnOption: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    minHeight: "40px",
+    fontSize: "14px",
+    color: "#0f172a",
+    cursor: "pointer",
+  },
+  checkbox: {
+    width: "18px",
+    height: "18px",
+    cursor: "pointer",
+  },
+  columnMoveActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  },
+  moveBtn: {
+    width: "30px",
+    height: "30px",
+    borderRadius: "10px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontSize: "15px",
+    fontWeight: 800,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  moveBtnDisabled: {
+    opacity: 0.35,
+    cursor: "not-allowed",
+  },
+  modalFooter: {
+    padding: "18px 22px",
+    borderTop: "1px solid #e2e8f0",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    flexWrap: "wrap",
+    flexShrink: 0,
+  },
+  modalFooterLeft: {
     display: "flex",
     gap: "10px",
     flexWrap: "wrap",
   },
-  orgList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  orgCard: {
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "24px",
-    padding: "18px",
-  },
-  orgTitle: {
-    fontSize: "22px",
-    fontWeight: 850,
+  secondaryBtn: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
     color: "#0f172a",
-    marginBottom: "6px",
+    padding: "0 14px",
+    fontSize: "13px",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
   },
-  badgeRow: {
-    display: "flex",
-    gap: "8px",
-    flexWrap: "wrap",
-  },
-  infoGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "10px 20px",
-    marginBottom: "16px",
-    color: "#334155",
-    fontSize: "14px",
-    lineHeight: 1.7,
-  },
-  emptyBox: {
-    background: "#f8fafc",
-    border: "1px dashed #cbd5e1",
-    borderRadius: "18px",
-    padding: "18px",
-    color: "#64748b",
-    textAlign: "center",
-    fontSize: "14px",
+  primaryBtn: {
+    minHeight: "40px",
+    borderRadius: "12px",
+    border: "1px solid #0f172a",
+    background: "#0f172a",
+    color: "#ffffff",
+    padding: "0 18px",
+    fontSize: "13px",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
   },
 };

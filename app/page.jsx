@@ -1,4 +1,5 @@
 import ApplicationForm from "../components/ApplicationForm";
+import Link from "next/link";
 
 export default function HomePage() {
   return (
@@ -62,7 +63,7 @@ export default function HomePage() {
             <a href="#how" style={navLink}>Necə işləyir</a>
             <a href="#news" style={navLink}>Günün xəbəri</a>
             <a href="#contact" style={navLink}>Əlaqə</a>
-            <a href="/login" style={loginButton}>Admin giriş</a>
+            <Link href="/login" style={loginButton}>Admin giriş</Link>
           </nav>
         </div>
       </header>
@@ -208,7 +209,7 @@ export default function HomePage() {
             <strong style={footerTitle}>Keçidlər</strong>
             <div><a href="#how" style={footerLink}>Necə işləyir</a></div>
             <div><a href="#news" style={footerLink}>Günün xəbəri</a></div>
-            <div><a href="/login" style={footerLink}>Admin giriş</a></div>
+            <div><Link href="/login" style={footerLink}>Admin giriş</Link></div>
           </div>
         </div>
       </footer>
