@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { ORGANIZATION_STATUSES, APPROVAL_STATUSES } from "../../../lib/admin-options";
 
@@ -26,6 +26,27 @@ const TABLE_COLUMNS = [
 ];
 
 const DEFAULT_VISIBLE_COLUMNS = TABLE_COLUMNS.map((column) => column.key);
+
+const COLUMN_WIDTHS = {
+  rowNumber: 70,
+  name: 190,
+  type: 155,
+  contact: 170,
+  phone: 145,
+  email: 220,
+  region: 140,
+  website: 190,
+  balance: 135,
+  leadPrice: 145,
+  status: 150,
+  approval: 160,
+  note: 220,
+  action: 150,
+};
+
+TABLE_COLUMNS.forEach((column) => {
+  column.width = COLUMN_WIDTHS[column.key];
+});
 
 const getLabel = (list, value) =>
   list.find((item) => item.value === value)?.label || value || "-";
@@ -137,6 +158,8 @@ async function copyRows(rows, columns, getValue, setMessage) {
 }
 
 export default function OrganizationsPage() {
+  const tableSectionRef = useRef(null);
+
   const [organizationTypes, setOrganizationTypes] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +173,7 @@ export default function OrganizationsPage() {
   const [rowLimit, setRowLimit] = useState("25");
   const [exportOpen, setExportOpen] = useState(false);
   const [columnPanelOpen, setColumnPanelOpen] = useState(false);
+  const [tableAvailableWidth, setTableAvailableWidth] = useState(0);
 
   const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
     if (typeof window === "undefined") return DEFAULT_VISIBLE_COLUMNS;
@@ -170,6 +194,27 @@ export default function OrganizationsPage() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const section = tableSectionRef.current;
+    if (!section) return undefined;
+
+    const updateWidth = () => {
+      setTableAvailableWidth(section.getBoundingClientRect().width);
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(section);
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -223,6 +268,34 @@ export default function OrganizationsPage() {
         .map((key) => TABLE_COLUMNS.find((column) => column.key === key))
         .filter(Boolean),
     [visibleColumnKeys]
+  );
+
+  const tableWidth = useMemo(
+    () => visibleColumns.reduce((sum, column) => sum + column.width, 0),
+    [visibleColumns]
+  );
+
+  const tableStyle = useMemo(
+    () => ({
+      ...styles.table,
+      width: `${tableWidth}px`,
+      minWidth: `${tableWidth}px`,
+    }),
+    [tableWidth]
+  );
+
+  const tableShellWidth = useMemo(() => {
+    const visualTableWidth = tableWidth + 4;
+    if (!tableAvailableWidth) return visualTableWidth;
+    return Math.min(visualTableWidth, tableAvailableWidth);
+  }, [tableAvailableWidth, tableWidth]);
+
+  const tableShellStyle = useMemo(
+    () => ({
+      ...styles.tableShell,
+      width: `${tableShellWidth}px`,
+    }),
+    [tableShellWidth]
   );
 
   const orderedColumnsForPanel = useMemo(() => {
@@ -458,7 +531,7 @@ export default function OrganizationsPage() {
 
       {message ? <div style={styles.messageBox}>{message}</div> : null}
 
-      <div style={styles.panel}>
+      <div style={styles.filterPanel}>
         <div style={styles.filters}>
           <input
             placeholder="Təşkilat, email, telefon və ya əlaqədar şəxs axtar"
@@ -504,12 +577,14 @@ export default function OrganizationsPage() {
           </select>
         </div>
 
-        <div style={styles.toolbar}>
+      </div>
+
+      <div style={styles.tableToolbar}>
           <div style={styles.resultText}>
             Tapıldı: <strong>{filteredOrganizations.length}</strong> təşkilat
           </div>
 
-          <div style={styles.toolbarActions}>
+        <div style={styles.toolbarActions}>
             <label style={styles.showLabel}>Göstər</label>
             <select value={rowLimit} onChange={(e) => setRowLimit(e.target.value)} style={styles.smallSelect}>
               <option value="10">10</option>
@@ -578,8 +653,15 @@ export default function OrganizationsPage() {
           </div>
         </div>
 
-        <div style={styles.tableWrap}>
-          <table style={styles.table}>
+      <div ref={tableSectionRef} style={styles.tableSection}>
+        <div style={tableShellStyle}>
+          <div style={styles.tableScroll}>
+          <table style={tableStyle}>
+            <colgroup>
+              {visibleColumns.map((column) => (
+                <col key={column.key} style={{ width: `${column.width}px` }} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
                 {visibleColumns.map((column) => (
@@ -604,6 +686,7 @@ export default function OrganizationsPage() {
               ))}
             </tbody>
           </table>
+          </div>
 
           {!visibleOrganizations.length ? (
             <div style={styles.emptyBox}>
@@ -739,17 +822,17 @@ const styles = {
     fontSize: "14px",
     color: "#334155",
   },
-  panel: {
+  filterPanel: {
     background: "#ffffff",
     border: "1px solid #dbe4ee",
-    borderRadius: "28px",
-    padding: "22px",
+    borderRadius: "22px",
+    padding: "18px",
+    marginBottom: "14px",
   },
   filters: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "14px",
-    marginBottom: "18px",
   },
   input: {
     minHeight: "46px",
@@ -770,12 +853,16 @@ const styles = {
     background: "#ffffff",
     fontFamily: "inherit",
   },
-  toolbar: {
+  tableToolbar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "12px",
     flexWrap: "wrap",
+    background: "#ffffff",
+    border: "1px solid #dbe4ee",
+    borderRadius: "18px",
+    padding: "12px 14px",
     marginBottom: "14px",
   },
   resultText: {
@@ -854,14 +941,23 @@ const styles = {
     cursor: "pointer",
     fontFamily: "inherit",
   },
-  tableWrap: {
+  tableSection: {
+    width: "100%",
+  },
+  tableShell: {
+    display: "block",
+    maxWidth: "100%",
+    alignSelf: "flex-start",
+  },
+  tableScroll: {
+    width: "100%",
     overflowX: "auto",
     border: "1px solid #e2e8f0",
     borderRadius: "20px",
+    background: "#ffffff",
   },
   table: {
-    width: "100%",
-    minWidth: "1420px",
+    tableLayout: "fixed",
     borderCollapse: "collapse",
   },
   th: {
@@ -873,6 +969,8 @@ const styles = {
     borderBottom: "1px solid #e2e8f0",
     borderRight: "1px solid #e2e8f0",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
   td: {
     padding: "12px 14px",
@@ -880,6 +978,8 @@ const styles = {
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
     color: "#334155",
   },
   tdStrong: {
@@ -889,6 +989,8 @@ const styles = {
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
     color: "#0f172a",
   },
   ellipsisCell: {

@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
 const PRODUCT_STATUSES = [
@@ -27,20 +27,20 @@ const ACTIVE_FILTERS = [
 const COLUMN_STORAGE_KEY = "vabank_products_visible_columns";
 
 const TABLE_COLUMNS = [
-  { key: "productName", label: "Məhsul adı", exportable: true },
-  { key: "creditForm", label: "Kredit forması", exportable: true },
-  { key: "organizationType", label: "Təşkilat növü", exportable: true },
-  { key: "organization", label: "Təşkilat", exportable: true },
-  { key: "currency", label: "Valyuta", exportable: true },
-  { key: "amount", label: "Məbləğ", exportable: true },
-  { key: "term", label: "Müddət", exportable: true },
-  { key: "interest", label: "Faiz", exportable: true },
-  { key: "commission", label: "Komissiya", exportable: true },
-  { key: "status", label: "Status", exportable: true },
-  { key: "approval", label: "Approval", exportable: true },
-  { key: "active", label: "Aktiv", exportable: true },
-  { key: "requirements", label: "Şərtlər", exportable: true },
-  { key: "action", label: "Əməliyyat", exportable: false },
+  { key: "productName", label: "Məhsul adı", exportable: true, width: 180 },
+  { key: "creditForm", label: "Kredit forması", exportable: true, width: 160 },
+  { key: "organizationType", label: "Təşkilat növü", exportable: true, width: 150 },
+  { key: "organization", label: "Təşkilat", exportable: true, width: 170 },
+  { key: "currency", label: "Valyuta", exportable: true, width: 95 },
+  { key: "amount", label: "Məbləğ", exportable: true, width: 190 },
+  { key: "term", label: "Müddət", exportable: true, width: 145 },
+  { key: "interest", label: "Faiz", exportable: true, width: 165 },
+  { key: "commission", label: "Komissiya", exportable: true, width: 155 },
+  { key: "status", label: "Status", exportable: true, width: 160 },
+  { key: "approval", label: "Approval", exportable: true, width: 160 },
+  { key: "active", label: "Aktiv", exportable: true, width: 110 },
+  { key: "requirements", label: "Şərtlər", exportable: true, width: 280 },
+  { key: "action", label: "Əməliyyat", exportable: false, width: 150 },
 ];
 
 const DEFAULT_VISIBLE_COLUMNS = TABLE_COLUMNS.map((column) => column.key);
@@ -155,6 +155,8 @@ async function copyRows(rows, columns, getValue, setMessage) {
 }
 
 export default function ProductsPage() {
+  const tableSectionRef = useRef(null);
+
   const [creditForms, setCreditForms] = useState([]);
   const [organizationTypes, setOrganizationTypes] = useState([]);
   const [organizations, setOrganizations] = useState([]);
@@ -174,6 +176,7 @@ export default function ProductsPage() {
   const [rowLimit, setRowLimit] = useState("25");
   const [exportOpen, setExportOpen] = useState(false);
   const [columnPanelOpen, setColumnPanelOpen] = useState(false);
+  const [tableAvailableWidth, setTableAvailableWidth] = useState(0);
 
   const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
     if (typeof window === "undefined") return DEFAULT_VISIBLE_COLUMNS;
@@ -201,6 +204,27 @@ export default function ProductsPage() {
       localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(visibleColumnKeys));
     } catch {}
   }, [visibleColumnKeys]);
+
+  useEffect(() => {
+    const section = tableSectionRef.current;
+    if (!section) return undefined;
+
+    const updateAvailableWidth = () => {
+      setTableAvailableWidth(Math.floor(section.getBoundingClientRect().width));
+    };
+
+    updateAvailableWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateAvailableWidth);
+      return () => window.removeEventListener("resize", updateAvailableWidth);
+    }
+
+    const observer = new ResizeObserver(updateAvailableWidth);
+    observer.observe(section);
+
+    return () => observer.disconnect();
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -292,6 +316,34 @@ export default function ProductsPage() {
         .map((key) => TABLE_COLUMNS.find((column) => column.key === key))
         .filter(Boolean),
     [visibleColumnKeys]
+  );
+
+  const tableWidth = useMemo(
+    () => visibleColumns.reduce((sum, column) => sum + column.width, 0),
+    [visibleColumns]
+  );
+
+  const tableStyle = useMemo(
+    () => ({
+      ...styles.table,
+      width: `${tableWidth}px`,
+      minWidth: `${tableWidth}px`,
+    }),
+    [tableWidth]
+  );
+
+  const tableShellWidth = useMemo(() => {
+    const visualTableWidth = tableWidth + 4;
+    if (!tableAvailableWidth) return visualTableWidth;
+    return Math.min(visualTableWidth, tableAvailableWidth);
+  }, [tableAvailableWidth, tableWidth]);
+
+  const tableShellStyle = useMemo(
+    () => ({
+      ...styles.tableShell,
+      width: `${tableShellWidth}px`,
+    }),
+    [tableShellWidth]
   );
 
   const orderedColumnsForPanel = useMemo(() => {
@@ -614,7 +666,7 @@ export default function ProductsPage() {
 
       {message ? <div style={styles.messageBox}>{message}</div> : null}
 
-      <div style={styles.panel}>
+      <div style={styles.filterPanel}>
         <div style={styles.filters}>
           <input
             placeholder="Məhsul, təşkilat və ya kredit forması axtar"
@@ -691,116 +743,126 @@ export default function ProductsPage() {
             ))}
           </select>
         </div>
+      </div>
 
-        <div style={styles.toolbar}>
-          <div style={styles.resultText}>
-            Tapıldı: <strong>{filteredProducts.length}</strong> məhsul
-          </div>
-
-          <div style={styles.toolbarActions}>
-            <label style={styles.showLabel}>Göstər</label>
-            <select value={rowLimit} onChange={(e) => setRowLimit(e.target.value)} style={styles.smallSelect}>
-              <option value="10">10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-            </select>
-
-            <button
-              type="button"
-              onClick={() => setColumnPanelOpen(true)}
-              style={styles.columnBtn}
-            >
-              Sütun seç
-            </button>
-
-            <div style={styles.exportWrap}>
-              <button
-                type="button"
-                onClick={() => setExportOpen((prev) => !prev)}
-                style={styles.exportBtn}
-              >
-                Export
-              </button>
-
-              {exportOpen ? (
-                <div style={styles.exportMenu}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExportOpen(false);
-                      window.print();
-                    }}
-                    style={styles.exportMenuItem}
-                  >
-                    Çap / PDF
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExportOpen(false);
-                      copyRows(visibleProducts, visibleColumns, getCellValue, setMessage);
-                    }}
-                    style={styles.exportMenuItem}
-                  >
-                    Kopyala
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExportOpen(false);
-                      downloadCsv(visibleProducts, visibleColumns, getCellValue);
-                    }}
-                    style={styles.exportMenuItem}
-                  >
-                    CSV
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExportOpen(false);
-                      downloadExcel(visibleProducts, visibleColumns, getCellValue);
-                    }}
-                    style={styles.exportMenuItem}
-                  >
-                    Excel file
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
+      <div style={styles.tableToolbar}>
+        <div style={styles.resultText}>
+          Tapıldı: <strong>{filteredProducts.length}</strong> məhsul
         </div>
 
-        <div style={styles.tableWrap}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                {visibleColumns.map((column) => (
-                  <th key={column.key} style={styles.th}>
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
+        <div style={styles.toolbarActions}>
+          <label style={styles.showLabel}>Göstər</label>
+          <select value={rowLimit} onChange={(e) => setRowLimit(e.target.value)} style={styles.smallSelect}>
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
 
-            <tbody>
-              {visibleProducts.map((item) => (
-                <tr key={item.id}>
+          <button
+            type="button"
+            onClick={() => setColumnPanelOpen(true)}
+            style={styles.columnBtn}
+          >
+            Sütun seç
+          </button>
+
+          <div style={styles.exportWrap}>
+            <button
+              type="button"
+              onClick={() => setExportOpen((prev) => !prev)}
+              style={styles.exportBtn}
+            >
+              Export
+            </button>
+
+            {exportOpen ? (
+              <div style={styles.exportMenu}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportOpen(false);
+                    window.print();
+                  }}
+                  style={styles.exportMenuItem}
+                >
+                  Çap / PDF
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportOpen(false);
+                    copyRows(visibleProducts, visibleColumns, getCellValue, setMessage);
+                  }}
+                  style={styles.exportMenuItem}
+                >
+                  Kopyala
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportOpen(false);
+                    downloadCsv(visibleProducts, visibleColumns, getCellValue);
+                  }}
+                  style={styles.exportMenuItem}
+                >
+                  CSV
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportOpen(false);
+                    downloadExcel(visibleProducts, visibleColumns, getCellValue);
+                  }}
+                  style={styles.exportMenuItem}
+                >
+                  Excel file
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div ref={tableSectionRef} style={styles.tableSection}>
+        <div style={tableShellStyle}>
+          <div style={styles.tableScroll}>
+            <table style={tableStyle}>
+              <colgroup>
+                {visibleColumns.map((column) => (
+                  <col key={column.key} style={{ width: `${column.width}px` }} />
+                ))}
+              </colgroup>
+
+              <thead>
+                <tr>
                   {visibleColumns.map((column) => (
-                    <td
-                      key={column.key}
-                      style={column.key === "productName" ? styles.tdStrong : styles.td}
-                    >
-                      {renderCell(column.key, item)}
-                    </td>
+                    <th key={column.key} style={styles.th}>
+                      {column.label}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {visibleProducts.map((item) => (
+                  <tr key={item.id}>
+                    {visibleColumns.map((column) => (
+                      <td
+                        key={column.key}
+                        style={column.key === "productName" ? styles.tdStrong : styles.td}
+                      >
+                        {renderCell(column.key, item)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           {!visibleProducts.length ? <div style={styles.emptyBox}>Uyğun məhsul tapılmadı.</div> : null}
         </div>
@@ -937,17 +999,17 @@ const styles = {
     fontSize: "14px",
     color: "#334155",
   },
-  panel: {
+  filterPanel: {
     background: "#ffffff",
     border: "1px solid #dbe4ee",
-    borderRadius: "28px",
-    padding: "22px",
+    borderRadius: "22px",
+    padding: "18px",
+    marginBottom: "14px",
   },
   filters: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "14px",
-    marginBottom: "18px",
   },
   input: {
     minHeight: "46px",
@@ -968,12 +1030,16 @@ const styles = {
     background: "#ffffff",
     fontFamily: "inherit",
   },
-  toolbar: {
+  tableToolbar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "12px",
     flexWrap: "wrap",
+    background: "#ffffff",
+    border: "1px solid #dbe4ee",
+    borderRadius: "18px",
+    padding: "12px 14px",
     marginBottom: "14px",
   },
   resultText: {
@@ -1052,14 +1118,23 @@ const styles = {
     cursor: "pointer",
     fontFamily: "inherit",
   },
-  tableWrap: {
+  tableSection: {
+    width: "100%",
+  },
+  tableShell: {
+    display: "block",
+    maxWidth: "100%",
+    alignSelf: "flex-start",
+  },
+  tableScroll: {
+    width: "100%",
     overflowX: "auto",
     border: "1px solid #e2e8f0",
     borderRadius: "20px",
+    background: "#ffffff",
   },
   table: {
-    width: "100%",
-    minWidth: "1500px",
+    tableLayout: "fixed",
     borderCollapse: "collapse",
   },
   th: {
@@ -1071,6 +1146,8 @@ const styles = {
     borderBottom: "1px solid #e2e8f0",
     borderRight: "1px solid #e2e8f0",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
   td: {
     padding: "12px 14px",
@@ -1078,6 +1155,8 @@ const styles = {
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
     color: "#334155",
   },
   tdStrong: {
@@ -1087,6 +1166,8 @@ const styles = {
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
     color: "#0f172a",
   },
   ellipsisCell: {

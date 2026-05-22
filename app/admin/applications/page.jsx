@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
 const STATUS_OPTIONS = [
@@ -49,6 +49,27 @@ const TABLE_COLUMNS = [
 ];
 
 const DEFAULT_VISIBLE_COLUMNS = TABLE_COLUMNS.map((column) => column.key);
+
+const COLUMN_WIDTHS = {
+  id: 80,
+  date: 150,
+  fullName: 190,
+  phone: 145,
+  email: 220,
+  customerType: 145,
+  creditType: 160,
+  organization: 170,
+  amount: 150,
+  term: 125,
+  distribution: 180,
+  risk: 110,
+  status: 150,
+  action: 150,
+};
+
+TABLE_COLUMNS.forEach((column) => {
+  column.width = COLUMN_WIDTHS[column.key];
+});
 
 function normalizeStatus(status) {
   if (status === "processing") return "reviewing";
@@ -265,6 +286,8 @@ async function copyRows(rows, riskMap, visibleColumns, setPageMessage) {
 }
 
 export default function ApplicationsPage() {
+  const tableSectionRef = useRef(null);
+
   const [applications, setApplications] = useState([]);
   const [customerFlags, setCustomerFlags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -281,6 +304,7 @@ export default function ApplicationsPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [columnPanelOpen, setColumnPanelOpen] = useState(false);
   const [draggedColumnKey, setDraggedColumnKey] = useState(null);
+  const [tableAvailableWidth, setTableAvailableWidth] = useState(0);
 
   const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
     if (typeof window === "undefined") return DEFAULT_VISIBLE_COLUMNS;
@@ -309,6 +333,27 @@ return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
       localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(visibleColumnKeys));
     } catch (error) {}
   }, [visibleColumnKeys]);
+
+  useEffect(() => {
+    const section = tableSectionRef.current;
+    if (!section) return undefined;
+
+    const updateWidth = () => {
+      setTableAvailableWidth(section.getBoundingClientRect().width);
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(section);
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -356,11 +401,39 @@ return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
     fetchData();
   }, []);
 
-    const visibleColumns = useMemo(() => {
+  const visibleColumns = useMemo(() => {
     return visibleColumnKeys
       .map((key) => TABLE_COLUMNS.find((column) => column.key === key))
       .filter(Boolean);
   }, [visibleColumnKeys]);
+
+  const tableWidth = useMemo(
+    () => visibleColumns.reduce((sum, column) => sum + column.width, 0),
+    [visibleColumns]
+  );
+
+  const tableStyle = useMemo(
+    () => ({
+      ...styles.table,
+      width: `${tableWidth}px`,
+      minWidth: `${tableWidth}px`,
+    }),
+    [tableWidth]
+  );
+
+  const tableShellWidth = useMemo(() => {
+    const visualTableWidth = tableWidth + 4;
+    if (!tableAvailableWidth) return visualTableWidth;
+    return Math.min(visualTableWidth, tableAvailableWidth);
+  }, [tableAvailableWidth, tableWidth]);
+
+  const tableShellStyle = useMemo(
+    () => ({
+      ...styles.tableShell,
+      width: `${tableShellWidth}px`,
+    }),
+    [tableShellWidth]
+  );
 
   const orderedColumnsForPanel = useMemo(() => {
     const visibleOrdered = visibleColumnKeys
@@ -596,7 +669,7 @@ return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
 
       {pageMessage ? <div style={styles.messageBox}>{pageMessage}</div> : null}
 
-      <div style={styles.panel}>
+      <div style={styles.filterPanel}>
         <div style={styles.filters}>
           <input
             placeholder="ID, ad, telefon və ya email ilə axtar"
@@ -645,12 +718,14 @@ return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
           </select>
         </div>
 
-        <div style={styles.toolbar}>
+      </div>
+
+      <div style={styles.tableToolbar}>
           <div style={styles.resultText}>
             Tapıldı: <strong>{filteredApplications.length}</strong> müraciət
           </div>
 
-          <div style={styles.toolbarActions}>
+        <div style={styles.toolbarActions}>
             <label style={styles.showLabel}>Göstər</label>
 
             <select value={rowLimit} onChange={(e) => setRowLimit(e.target.value)} style={styles.smallSelect}>
@@ -728,8 +803,15 @@ return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
           </div>
         </div>
 
-        <div style={styles.tableWrap}>
-          <table style={styles.table}>
+      <div ref={tableSectionRef} style={styles.tableSection}>
+        <div style={tableShellStyle}>
+          <div style={styles.tableScroll}>
+          <table style={tableStyle}>
+            <colgroup>
+              {visibleColumns.map((column) => (
+                <col key={column.key} style={{ width: `${column.width}px` }} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
                 {visibleColumns.map((column) => (
@@ -769,6 +851,7 @@ return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
               ))}
             </tbody>
           </table>
+          </div>
 
           {!visibleApplications.length ? (
             <div style={styles.emptyBox}>Uyğun müraciət tapılmadı.</div>
@@ -935,18 +1018,18 @@ const styles = {
     color: "#334155",
   },
 
-  panel: {
+  filterPanel: {
     background: "#ffffff",
     border: "1px solid #dbe4ee",
-    borderRadius: "28px",
-    padding: "22px",
+    borderRadius: "22px",
+    padding: "18px",
+    marginBottom: "14px",
   },
 
   filters: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "14px",
-    marginBottom: "18px",
   },
 
   input: {
@@ -970,12 +1053,16 @@ const styles = {
     fontFamily: "inherit",
   },
 
-  toolbar: {
+  tableToolbar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "12px",
     flexWrap: "wrap",
+    background: "#ffffff",
+    border: "1px solid #dbe4ee",
+    borderRadius: "18px",
+    padding: "12px 14px",
     marginBottom: "14px",
   },
 
@@ -1064,15 +1151,24 @@ const styles = {
     fontFamily: "inherit",
   },
 
-  tableWrap: {
+  tableSection: {
+    width: "100%",
+  },
+  tableShell: {
+    display: "block",
+    maxWidth: "100%",
+    alignSelf: "flex-start",
+  },
+  tableScroll: {
+    width: "100%",
     overflowX: "auto",
     border: "1px solid #e2e8f0",
     borderRadius: "20px",
+    background: "#ffffff",
   },
 
   table: {
-    width: "100%",
-    minWidth: "1300px",
+    tableLayout: "fixed",
     borderCollapse: "collapse",
   },
 
@@ -1085,6 +1181,8 @@ const styles = {
     borderBottom: "1px solid #e2e8f0",
     borderRight: "1px solid #e2e8f0",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
 
   thCenter: {
@@ -1096,6 +1194,8 @@ const styles = {
     borderBottom: "1px solid #e2e8f0",
     borderRight: "1px solid #e2e8f0",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
 
   td: {
@@ -1104,6 +1204,8 @@ const styles = {
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
 
   tdCenter: {
@@ -1113,6 +1215,8 @@ const styles = {
     borderRight: "1px solid #eef2f7",
     whiteSpace: "nowrap",
     textAlign: "center",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
 
   tdStrong: {
@@ -1122,6 +1226,8 @@ const styles = {
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
 
   badge: {
