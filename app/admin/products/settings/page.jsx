@@ -35,6 +35,19 @@ const COMMISSION_TYPES = [
   { value: "fixed", label: "Sabit məbləğlə komissiya" },
 ];
 
+const MONETIZATION_MODEL_OPTIONS = [
+  { value: "lead_fee_only", label: "Yalnız lead fee" },
+  { value: "success_fee_only", label: "Yalnız success fee" },
+  { value: "hybrid", label: "Hybrid" },
+  { value: "free_test", label: "Pulsuz test" },
+  { value: "disabled", label: "Deaktiv" },
+];
+
+const SUCCESS_FEE_TYPE_OPTIONS = [
+  { value: "percent", label: "Faiz" },
+  { value: "fixed", label: "Sabit məbləğ" },
+];
+
 const slugify = (text = "") =>
   text
     .toString()
@@ -75,6 +88,16 @@ const safeJsonParse = (value) => {
     return [];
   }
 };
+
+const toNullableNumber = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  return Number(value);
+};
+
+const getMonetizationFlags = (model) => ({
+  lead_fee_enabled: model === "lead_fee_only" || model === "hybrid",
+  success_fee_enabled: model === "success_fee_only" || model === "hybrid",
+});
 
 const getBadgeStyle = (value) => {
   const map = {
@@ -148,6 +171,15 @@ const emptyProductForm = {
   approval_status: "pending",
   is_active: true,
   note: "",
+  use_custom_monetization: false,
+  monetization_model: "",
+  lead_fee_enabled: false,
+  lead_fee_amount: "",
+  success_fee_enabled: false,
+  success_fee_type: "percent",
+  success_fee_percent: "",
+  success_fee_fixed_amount: "",
+  attribution_window_days: "90",
 };
 
 export default function ProductsPage() {
@@ -174,6 +206,7 @@ export default function ProductsPage() {
   const [savingCreditForm, setSavingCreditForm] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
   const [message, setMessage] = useState("");
+  const [productFormError, setProductFormError] = useState("");
 
   const typeMap = useMemo(() => {
     const map = {};
@@ -304,6 +337,7 @@ export default function ProductsPage() {
     setRequirementValues({});
     setEditingProductId(null);
     setProductNameTouched(false);
+    setProductFormError("");
   };
 
   const handleCreditFormNameChange = (value) => {
@@ -336,6 +370,56 @@ export default function ProductsPage() {
       has_commission: value !== "none",
       commission_percent: value === "percent" ? prev.commission_percent : "",
       commission_amount: value === "fixed" ? prev.commission_amount : "",
+    }));
+  };
+
+  const handleCustomMonetizationToggle = (checked) => {
+    setProductFormError("");
+    setProductForm((prev) => {
+      if (!checked) {
+        return {
+          ...prev,
+          use_custom_monetization: false,
+          monetization_model: "",
+          lead_fee_enabled: false,
+          lead_fee_amount: "",
+          success_fee_enabled: false,
+          success_fee_type: "percent",
+          success_fee_percent: "",
+          success_fee_fixed_amount: "",
+          attribution_window_days: "90",
+        };
+      }
+
+      const model = prev.monetization_model || "lead_fee_only";
+      return {
+        ...prev,
+        use_custom_monetization: true,
+        monetization_model: model,
+        ...getMonetizationFlags(model),
+        success_fee_type: prev.success_fee_type || "percent",
+        attribution_window_days: prev.attribution_window_days || "90",
+      };
+    });
+  };
+
+  const handleMonetizationModelChange = (model) => {
+    setProductFormError("");
+    setProductForm((prev) => ({
+      ...prev,
+      monetization_model: model,
+      ...getMonetizationFlags(model),
+      success_fee_type: prev.success_fee_type || "percent",
+      attribution_window_days: prev.attribution_window_days || "90",
+    }));
+  };
+
+  const handleSuccessFeeTypeChange = (value) => {
+    setProductForm((prev) => ({
+      ...prev,
+      success_fee_type: value,
+      success_fee_percent: value === "percent" ? prev.success_fee_percent : "",
+      success_fee_fixed_amount: value === "fixed" ? prev.success_fee_fixed_amount : "",
     }));
   };
 
@@ -509,6 +593,7 @@ export default function ProductsPage() {
 
   const saveProduct = async (e) => {
     e.preventDefault();
+    setProductFormError("");
 
     if (!productForm.credit_form_id) {
       setMessage("Kredit forması seçilməlidir.");
@@ -544,8 +629,51 @@ export default function ProductsPage() {
       return;
     }
 
+    if (productForm.use_custom_monetization) {
+      if (!productForm.monetization_model) {
+        setProductFormError("Monetizasiya modeli seçilməlidir.");
+        return;
+      }
+
+      if (productForm.lead_fee_enabled && productForm.lead_fee_amount === "") {
+        setProductFormError("Lead fee məbləği qeyd edilməlidir.");
+        return;
+      }
+
+      if (productForm.success_fee_enabled) {
+        if (!productForm.success_fee_type) {
+          setProductFormError("Success fee tipi seçilməlidir.");
+          return;
+        }
+
+        if (productForm.success_fee_type === "percent" && productForm.success_fee_percent === "") {
+          setProductFormError("Success fee faizi qeyd edilməlidir.");
+          return;
+        }
+
+        if (
+          productForm.success_fee_type === "fixed" &&
+          productForm.success_fee_fixed_amount === ""
+        ) {
+          setProductFormError("Success fee sabit məbləği qeyd edilməlidir.");
+          return;
+        }
+
+        if (productForm.attribution_window_days === "") {
+          setProductForm((prev) => ({ ...prev, attribution_window_days: "90" }));
+          setProductFormError("Attribution müddəti boş qala bilməz. Default 90 gün saxlanıldı.");
+          return;
+        }
+      }
+    }
+
     setSavingProduct(true);
     setMessage("");
+
+    const customMonetizationEnabled = !!productForm.use_custom_monetization;
+    const leadFeeEnabled = customMonetizationEnabled && !!productForm.lead_fee_enabled;
+    const successFeeEnabled = customMonetizationEnabled && !!productForm.success_fee_enabled;
+    const successFeeType = productForm.success_fee_type || "percent";
 
     const payload = {
       credit_form_id: Number(productForm.credit_form_id),
@@ -574,6 +702,23 @@ export default function ProductsPage() {
       approval_status: productForm.approval_status,
       is_active: !!productForm.is_active,
       note: productForm.note.trim() || null,
+      use_custom_monetization: customMonetizationEnabled,
+      monetization_model: customMonetizationEnabled ? productForm.monetization_model : null,
+      lead_fee_enabled: customMonetizationEnabled ? leadFeeEnabled : null,
+      lead_fee_amount: leadFeeEnabled ? toNullableNumber(productForm.lead_fee_amount) : null,
+      success_fee_enabled: customMonetizationEnabled ? successFeeEnabled : null,
+      success_fee_type: successFeeEnabled ? successFeeType : null,
+      success_fee_percent:
+        successFeeEnabled && successFeeType === "percent"
+          ? toNullableNumber(productForm.success_fee_percent)
+          : null,
+      success_fee_fixed_amount:
+        successFeeEnabled && successFeeType === "fixed"
+          ? toNullableNumber(productForm.success_fee_fixed_amount)
+          : null,
+      attribution_window_days: successFeeEnabled
+        ? Number(productForm.attribution_window_days || 90)
+        : null,
       updated_at: new Date().toISOString(),
     };
 
@@ -675,9 +820,37 @@ export default function ProductsPage() {
       approval_status: item.approval_status || "pending",
       is_active: item.is_active ?? true,
       note: item.note || "",
+      use_custom_monetization: !!item.use_custom_monetization,
+      monetization_model: item.use_custom_monetization ? item.monetization_model || "" : "",
+      lead_fee_enabled: item.use_custom_monetization ? !!item.lead_fee_enabled : false,
+      lead_fee_amount:
+        item.use_custom_monetization && item.lead_fee_amount !== null && item.lead_fee_amount !== undefined
+          ? item.lead_fee_amount
+          : "",
+      success_fee_enabled: item.use_custom_monetization ? !!item.success_fee_enabled : false,
+      success_fee_type: item.success_fee_type || "percent",
+      success_fee_percent:
+        item.use_custom_monetization &&
+        item.success_fee_percent !== null &&
+        item.success_fee_percent !== undefined
+          ? item.success_fee_percent
+          : "",
+      success_fee_fixed_amount:
+        item.use_custom_monetization &&
+        item.success_fee_fixed_amount !== null &&
+        item.success_fee_fixed_amount !== undefined
+          ? item.success_fee_fixed_amount
+          : "",
+      attribution_window_days:
+        item.use_custom_monetization &&
+        item.attribution_window_days !== null &&
+        item.attribution_window_days !== undefined
+          ? item.attribution_window_days
+          : "90",
     });
     setRequirementValues(nextRequirementValues);
     setProductNameTouched(true);
+    setProductFormError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -833,6 +1006,13 @@ export default function ProductsPage() {
 
     return parts.filter(Boolean).join(" • ");
   };
+
+  const customMonetizationEnabled = !!productForm.use_custom_monetization;
+  const leadFeeVisible = customMonetizationEnabled && !!productForm.lead_fee_enabled;
+  const successFeeVisible = customMonetizationEnabled && !!productForm.success_fee_enabled;
+  const percentSuccessFeeVisible =
+    successFeeVisible && productForm.success_fee_type === "percent";
+  const fixedSuccessFeeVisible = successFeeVisible && productForm.success_fee_type === "fixed";
 
   return (
     <div>
@@ -1250,6 +1430,141 @@ export default function ProductsPage() {
               ) : null}
             </div>
 
+            <div style={styles.groupTitle}>Məhsul üzrə monetizasiya ayarı</div>
+
+            <div style={styles.monetizationBox}>
+              <label style={styles.checkboxCard}>
+                <input
+                  type="checkbox"
+                  checked={customMonetizationEnabled}
+                  onChange={(e) => handleCustomMonetizationToggle(e.target.checked)}
+                />
+                <span>Bu məhsul üçün xüsusi monetizasiya ayarı istifadə edilsin?</span>
+              </label>
+
+              <p style={styles.helperText}>
+                Bu ayar aktivdirsə, məhsul təşkilatın ümumi monetizasiya ayarını override edəcək.
+              </p>
+
+              {!customMonetizationEnabled ? (
+                <div style={styles.inheritNotice}>
+                  Xüsusi ayar aktiv deyil. Bu məhsul organization-level monetizasiya ayarını miras alacaq.
+                </div>
+              ) : (
+                <>
+                  {productFormError ? (
+                    <div style={styles.inlineError}>{productFormError}</div>
+                  ) : null}
+
+                  <div style={styles.formGrid}>
+                    <div>
+                      <label style={styles.label}>Monetizasiya modeli</label>
+                      <select
+                        style={styles.select}
+                        value={productForm.monetization_model}
+                        onChange={(e) => handleMonetizationModelChange(e.target.value)}
+                      >
+                        <option value="">Seçin</option>
+                        {MONETIZATION_MODEL_OPTIONS.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {leadFeeVisible ? (
+                      <div>
+                        <label style={styles.label}>Lead fee məbləği</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          style={styles.input}
+                          value={productForm.lead_fee_amount}
+                          onChange={(e) =>
+                            setProductForm((prev) => ({
+                              ...prev,
+                              lead_fee_amount: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
+
+                    {successFeeVisible ? (
+                      <div>
+                        <label style={styles.label}>Success fee tipi</label>
+                        <select
+                          style={styles.select}
+                          value={productForm.success_fee_type}
+                          onChange={(e) => handleSuccessFeeTypeChange(e.target.value)}
+                        >
+                          {SUCCESS_FEE_TYPE_OPTIONS.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+
+                    {percentSuccessFeeVisible ? (
+                      <div>
+                        <label style={styles.label}>Success fee faizi (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          style={styles.input}
+                          value={productForm.success_fee_percent}
+                          onChange={(e) =>
+                            setProductForm((prev) => ({
+                              ...prev,
+                              success_fee_percent: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
+
+                    {fixedSuccessFeeVisible ? (
+                      <div>
+                        <label style={styles.label}>Success fee sabit məbləği</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          style={styles.input}
+                          value={productForm.success_fee_fixed_amount}
+                          onChange={(e) =>
+                            setProductForm((prev) => ({
+                              ...prev,
+                              success_fee_fixed_amount: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
+
+                    {successFeeVisible ? (
+                      <div>
+                        <label style={styles.label}>Attribution müddəti (gün)</label>
+                        <input
+                          type="number"
+                          style={styles.input}
+                          value={productForm.attribution_window_days}
+                          onChange={(e) =>
+                            setProductForm((prev) => ({
+                              ...prev,
+                              attribution_window_days: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </div>
+
             <div style={styles.groupTitle}>Dinamik şərtlər / ilkin tələblər</div>
 
             <div style={styles.checkboxGrid}>
@@ -1519,6 +1834,38 @@ const styles = {
     fontSize: "14px",
     color: "#0f172a",
     fontWeight: 600,
+  },
+  monetizationBox: {
+    border: "1px solid #e2e8f0",
+    borderRadius: "18px",
+    padding: "14px",
+    background: "#ffffff",
+  },
+  helperText: {
+    margin: "10px 0 0",
+    fontSize: "13px",
+    color: "#64748b",
+    lineHeight: 1.5,
+  },
+  inheritNotice: {
+    marginTop: "12px",
+    border: "1px solid #dbe4ee",
+    borderRadius: "14px",
+    background: "#f8fafc",
+    color: "#475569",
+    padding: "12px 14px",
+    fontSize: "13px",
+    lineHeight: 1.5,
+  },
+  inlineError: {
+    margin: "12px 0",
+    border: "1px solid #fecaca",
+    borderRadius: "14px",
+    background: "#fef2f2",
+    color: "#b91c1c",
+    padding: "12px 14px",
+    fontSize: "13px",
+    lineHeight: 1.5,
   },
   actionRow: {
     display: "flex",
