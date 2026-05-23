@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  buildMonetizationSnapshot,
+  generateNextReferralId,
+} from "../lib/applicationMonetization";
 import { supabase } from "../lib/supabaseClient";
 
 const emptyCreditSelection = {
@@ -48,6 +52,17 @@ function sameCreditSelection(a, b) {
   );
 }
 
+function getDefaultAmount(product) {
+  const minAmount = Number(product?.min_amount || 0);
+  const maxAmount = Number(product?.max_amount || 0);
+
+  if (minAmount > 0) return minAmount;
+  if (maxAmount >= 1000) return 1000;
+  if (maxAmount > 0) return maxAmount;
+
+  return 1;
+}
+
 function isPublicOrganizationVisible(organization) {
   return (
     organization?.public_visible !== false &&
@@ -63,6 +78,10 @@ function getOrganizationDisplayName(organization) {
   }
 
   return organization.name || organization.public_display_name?.trim() || "Partnyor Bank";
+}
+
+function isReferralConflict(error) {
+  return error?.code === "23505" && String(error.message || "").includes("referral_id");
 }
 
 export default function ApplicationForm() {
@@ -252,7 +271,7 @@ export default function ApplicationForm() {
         credit_form_id: creditFormId ? String(creditFormId) : "",
         organization_id: organizationId ? String(organizationId) : "",
         product_id: product?.id ? String(product.id) : "",
-        amount: product ? Number(product.min_amount || 0) : 0,
+        amount: product ? getDefaultAmount(product) : 0,
         term_months: product ? Number(product.min_term_months || 0) : 0,
       };
 
@@ -392,7 +411,7 @@ export default function ApplicationForm() {
 
     updateActiveCredit({
       product_id: value,
-      amount: product ? Number(product.min_amount || 0) : 0,
+      amount: product ? getDefaultAmount(product) : 0,
       term_months: product ? Number(product.min_term_months || 0) : 0,
     });
     clearError("product_id");
@@ -471,6 +490,7 @@ export default function ApplicationForm() {
     const nextErrors = {};
 
     if (!activeCredit.product_id || !selectedProduct) nextErrors.product_id = "Məhsul seçin.";
+    if (Number(activeCredit.amount || 0) <= 0) nextErrors.amount = "Kredit mЙ™blЙ™Дџi 0-dan bГ¶yГјk olmalД±dД±r.";
     if (!form.full_name.trim()) nextErrors.full_name = "Ad soyad daxil edin.";
     if (!form.email.trim()) nextErrors.email = "Email daxil edin.";
     if (!form.monthly_income) nextErrors.monthly_income = "Aylıq gəliri daxil edin.";
@@ -525,33 +545,61 @@ export default function ApplicationForm() {
         return;
       }
 
-      const { error } = await supabase.from("applications").insert([
-        {
-          product_id: Number(selectedProduct.id),
-          full_name: form.full_name.trim(),
-          email: form.email.trim(),
-          phone: fullPhone,
-          amount: Number(activeCredit.amount),
-          status: "new",
+      const organizationId = Number(selectedProduct.organization_id);
+      const monetizationSnapshot = await buildMonetizationSnapshot(
+        supabase,
+        selectedProduct.id,
+        organizationId
+      );
 
-          customer_type: customerType,
-          credit_type: selectedProductType?.name || selectedProduct.product_name || "",
-          organization: getOrganizationDisplayName(selectedOrganization),
-          selected_organization_id: Number(selectedProduct.organization_id),
+      const applicationPayload = {
+        product_id: Number(selectedProduct.id),
+        full_name: form.full_name.trim(),
+        email: form.email.trim(),
+        phone: fullPhone,
+        amount: Number(activeCredit.amount),
+        status: "new",
 
-          term_months: Number(activeCredit.term_months),
-          interest_rate: Number(selectedProduct.default_interest || 0),
-          monthly_payment: monthlyPayment,
+        customer_type: customerType,
+        credit_type: selectedProductType?.name || selectedProduct.product_name || "",
+        organization: getOrganizationDisplayName(selectedOrganization),
+        selected_organization_id: organizationId,
 
-          monthly_income: Number(form.monthly_income),
-          employment_type: form.employment_type,
-          region: form.region.trim(),
-          voen: form.voen.trim() || null,
-          note: form.note.trim() || null,
+        term_months: Number(activeCredit.term_months),
+        interest_rate: Number(selectedProduct.default_interest || 0),
+        monthly_payment: monthlyPayment,
 
-          distribution_type: form.distribution_type,
-        },
-      ]);
+        monthly_income: Number(form.monthly_income),
+        employment_type: form.employment_type,
+        region: form.region.trim(),
+        voen: form.voen.trim() || null,
+        note: form.note.trim() || null,
+
+        distribution_type: form.distribution_type,
+        ...monetizationSnapshot,
+      };
+
+      let error = null;
+
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const referralId = await generateNextReferralId(
+          supabase,
+          new Date().getFullYear(),
+          attempt
+        );
+        const insertResult = await supabase.from("applications").insert([
+          {
+            ...applicationPayload,
+            referral_id: referralId,
+          },
+        ]);
+
+        error = insertResult.error;
+
+        if (!isReferralConflict(error)) {
+          break;
+        }
+      }
 
       if (error) {
         setErrors((prev) => ({
@@ -703,6 +751,7 @@ export default function ApplicationForm() {
                   <span>{formatMoney(selectedProduct.max_amount)} AZN</span>
                 </div>
               </div>
+              {errors.amount && <div style={errorText}>{errors.amount}</div>}
 
               <div style={sliderBox}>
                 <div style={sliderHeader}>
