@@ -327,6 +327,106 @@ function getCreditResultAuditValues(item) {
   };
 }
 
+const BLOCKED_SUCCESS_FEE_STATUSES = new Set([
+  "calculated",
+  "invoiced",
+  "paid",
+  "disputed",
+  "cancelled",
+]);
+
+function calculateSuccessFeePreview(item) {
+  if (!item) return null;
+
+  const disbursedAmount = Number(item.credit_disbursed_amount);
+
+  if (item.success_fee_type === "percent") {
+    const percent = Number(item.success_fee_percent);
+    if (!Number.isFinite(disbursedAmount) || !Number.isFinite(percent)) return null;
+    return Math.round((disbursedAmount * percent / 100) * 100) / 100;
+  }
+
+  if (item.success_fee_type === "fixed") {
+    const fixedAmount = Number(item.success_fee_fixed_amount);
+    if (!Number.isFinite(fixedAmount)) return null;
+    return Math.round(fixedAmount * 100) / 100;
+  }
+
+  return null;
+}
+
+function getSuccessFeeEligibility(item) {
+  const reasons = [];
+
+  if (!item) {
+    return { eligible: false, reasons: ["Müraciət məlumatı tapılmadı."], previewAmount: null };
+  }
+
+  if (item.success_fee_enabled !== true) {
+    reasons.push("Success fee aktiv deyil.");
+  }
+
+  if (!["success_fee_only", "hybrid"].includes(item.monetization_model)) {
+    reasons.push("Monetizasiya modeli success fee üçün uyğun deyil.");
+  }
+
+  if (item.credit_result_status !== "disbursed") {
+    reasons.push("Kredit nəticəsi disbursed deyil.");
+  }
+
+  const disbursedAmount = Number(item.credit_disbursed_amount);
+  if (!Number.isFinite(disbursedAmount) || disbursedAmount <= 0) {
+    reasons.push("Verilən kredit məbləği yoxdur.");
+  }
+
+  if (!item.referral_id) {
+    reasons.push("Referral ID yoxdur.");
+  }
+
+  if (!item.attribution_expires_at) {
+    reasons.push("Attribution bitmə tarixi yoxdur.");
+  } else {
+    const expiresAt = new Date(item.attribution_expires_at);
+    if (Number.isNaN(expiresAt.getTime())) {
+      reasons.push("Attribution bitmə tarixi düzgün deyil.");
+    } else if (expiresAt < new Date()) {
+      reasons.push("Attribution müddəti bitib.");
+    }
+  }
+
+  if (!["percent", "fixed"].includes(item.success_fee_type)) {
+    reasons.push("Success fee tipi uyğun deyil.");
+  }
+
+  if (item.success_fee_type === "percent") {
+    const percent = Number(item.success_fee_percent);
+    if (!Number.isFinite(percent) || percent <= 0) {
+      reasons.push("Success fee faizi yoxdur.");
+    }
+  }
+
+  if (item.success_fee_type === "fixed") {
+    const fixedAmount = Number(item.success_fee_fixed_amount);
+    if (!Number.isFinite(fixedAmount) || fixedAmount <= 0) {
+      reasons.push("Success fee sabit məbləği yoxdur.");
+    }
+  }
+
+  if (BLOCKED_SUCCESS_FEE_STATUSES.has(item.success_fee_status)) {
+    reasons.push(
+      item.success_fee_status === "calculated"
+        ? "Success fee artıq hesablanıb."
+        : "Success fee statusu hesablamaya icazə vermir."
+    );
+  }
+
+  return {
+    eligible: reasons.length === 0,
+    reasons,
+    previewAmount: calculateSuccessFeePreview(item),
+  };
+}
+
 export default function ApplicationDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -350,6 +450,10 @@ const [updatingFlagId, setUpdatingFlagId] = useState(null);
   const [manualAuditLoading, setManualAuditLoading] = useState(false);
   const [manualAuditMessage, setManualAuditMessage] = useState("");
   const [manualAuditError, setManualAuditError] = useState("");
+  const [successFeeNote, setSuccessFeeNote] = useState("");
+  const [successFeeLoading, setSuccessFeeLoading] = useState(false);
+  const [successFeeMessage, setSuccessFeeMessage] = useState("");
+  const [successFeeError, setSuccessFeeError] = useState("");
 
   const organizationMap = useMemo(() => {
     const map = {};
@@ -362,6 +466,10 @@ const [updatingFlagId, setUpdatingFlagId] = useState(null);
   const activeFlagExists = useMemo(() => {
     return customerFlags.some((item) => item.status === "active");
   }, [customerFlags]);
+
+  const successFeeEligibility = useMemo(() => {
+    return getSuccessFeeEligibility(application);
+  }, [application]);
 
   async function fetchData() {
     try {
@@ -545,6 +653,67 @@ const [updatingFlagId, setUpdatingFlagId] = useState(null);
 
     setManualAuditMessage("Manual audit nəticəsi yadda saxlandı.");
     setManualAuditNote("");
+  }
+
+  async function submitSuccessFeeCalculation(event) {
+    event.preventDefault();
+
+    if (!application?.id) return;
+
+    setSuccessFeeError("");
+    setSuccessFeeMessage("");
+
+    if (!successFeeEligibility.eligible) {
+      setSuccessFeeError(successFeeEligibility.reasons[0] || "Success fee hesablamaq mümkün deyil.");
+      return;
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !userData?.user) {
+      setSuccessFeeError("Supabase sessiyası aktiv deyil. Yenidən login olun.");
+      return;
+    }
+
+    const admin = readStoredAdmin();
+    const adminEmail = admin.email || userData.user.email || "";
+    const adminRole = admin.role || "";
+    const cleanNote = successFeeNote.trim();
+
+    setSuccessFeeLoading(true);
+
+    const { data, error } = await supabase.rpc("calculate_application_success_fee", {
+      p_application_id: application.id,
+      p_changed_by_email: adminEmail,
+      p_changed_by_role: adminRole,
+      p_note: cleanNote || null,
+    });
+
+    setSuccessFeeLoading(false);
+
+    if (error) {
+      const message = error.message || "";
+      setSuccessFeeError(
+        message.includes("Only admins can calculate success fee")
+          ? "Admin sessiyası təsdiqlənmədi. Yenidən login olun."
+          : "Success fee hesablanmadı: " + message
+      );
+      return;
+    }
+
+    if (data?.application) {
+      setApplication(data.application);
+    }
+
+    const calculatedAmount =
+      data?.calculated_success_fee_amount ?? successFeeEligibility.previewAmount;
+
+    setSuccessFeeMessage(
+      calculatedAmount !== null && calculatedAmount !== undefined
+        ? `Success fee hesablandı: ${formatMoney(calculatedAmount)}`
+        : "Success fee hesablandı."
+    );
+    setSuccessFeeNote("");
   }
 
   async function createProblemFlag() {
@@ -944,6 +1113,104 @@ async function updateFlagStatus(flagId, nextStatus) {
             />
             <Info label="Commission notes" value={application.commission_notes} />
           </div>
+        </section>
+
+        <section style={styles.panel}>
+          <PanelHeader
+            title="Success fee hesabla"
+            desc="Uyğun müraciətlər üçün success fee məbləğini RPC ilə atomik hesabla və audit event-i yaz."
+          />
+
+          {successFeeMessage ? (
+            <div style={styles.inlineMessage}>{successFeeMessage}</div>
+          ) : null}
+
+          {successFeeError ? (
+            <div style={styles.errorBox}>{successFeeError}</div>
+          ) : null}
+
+          {!successFeeEligibility.eligible ? (
+            <div style={styles.errorBox}>
+              {successFeeEligibility.reasons[0] || "Success fee hesablamaq mümkün deyil."}
+            </div>
+          ) : (
+            <div style={styles.inlineMessage}>
+              Success fee hesablaması üçün şərtlər uyğundur.
+            </div>
+          )}
+
+          <div style={styles.infoGrid}>
+            <Info label="Referral ID" value={application.referral_id} />
+            <Info
+              label="Monetizasiya modeli"
+              value={getMonetizationModelLabel(application.monetization_model)}
+            />
+            <Info
+              label="Success fee aktivdir?"
+              value={formatBoolean(application.success_fee_enabled)}
+            />
+            <Info label="Success fee tipi" value={application.success_fee_type} />
+            <Info
+              label="Success fee faizi"
+              value={formatPercent(application.success_fee_percent)}
+            />
+            <Info
+              label="Success fee sabit məbləği"
+              value={formatMoney(application.success_fee_fixed_amount)}
+            />
+            <Info
+              label="Kredit nəticəsi statusu"
+              value={getCreditResultStatusLabel(application.credit_result_status)}
+            />
+            <Info
+              label="Verilən kredit məbləği"
+              value={formatMoney(application.credit_disbursed_amount)}
+            />
+            <Info
+              label="Attribution bitmə tarixi"
+              value={formatDateTime(application.attribution_expires_at)}
+            />
+            <Info
+              label="Hazır success fee statusu"
+              value={getSuccessFeeStatusLabel(application.success_fee_status)}
+            />
+            <Info
+              label="Hesablanacaq təxmini success fee"
+              value={formatMoney(successFeeEligibility.previewAmount)}
+            />
+          </div>
+
+          <form
+            onSubmit={submitSuccessFeeCalculation}
+            style={{ ...styles.auditForm, marginTop: "14px" }}
+          >
+            <div style={styles.formBlock}>
+              <label style={styles.formLabel}>Qeyd</label>
+              <textarea
+                value={successFeeNote}
+                onChange={(e) => setSuccessFeeNote(e.target.value)}
+                placeholder="Success fee hesablaması üçün qeyd yazın"
+                disabled={successFeeLoading}
+                style={{
+                  ...styles.textarea,
+                  ...(successFeeLoading ? styles.disabledTextarea : {}),
+                }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={successFeeLoading || !successFeeEligibility.eligible}
+              style={{
+                ...styles.primaryButton,
+                ...(successFeeLoading || !successFeeEligibility.eligible
+                  ? styles.disabled
+                  : {}),
+              }}
+            >
+              {successFeeLoading ? "Hesablanır..." : "Success fee hesabla"}
+            </button>
+          </form>
         </section>
 
         <section style={styles.panel}>
