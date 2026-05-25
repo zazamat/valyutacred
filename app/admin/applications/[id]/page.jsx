@@ -90,6 +90,17 @@ const COMMISSION_DISPUTE_STATUS_LABELS = {
   resolved_invalid: "Əsassız sayıldı",
 };
 
+const CREDIT_RESULT_OPTIONS = [
+  { value: "pending", label: "Gözləyir" },
+  { value: "under_review", label: "Baxılır" },
+  { value: "approved", label: "Təsdiqlənib" },
+  { value: "rejected", label: "İmtina edilib" },
+  { value: "customer_declined", label: "Müştəri imtina edib" },
+  { value: "disbursed", label: "Kredit verilib" },
+  { value: "expired", label: "Müddəti bitib" },
+  { value: "unknown", label: "Naməlum" },
+];
+
 function normalizeStatus(status) {
   if (status === "processing") return "reviewing";
   if (status === "sent") return "approved";
@@ -277,6 +288,45 @@ function formatDateTime(value) {
   }).format(date);
 }
 
+function formatDateInput(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value).slice(0, 10);
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function readStoredAdmin() {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = localStorage.getItem("valyutacred_auth");
+    const auth = raw ? JSON.parse(raw) : null;
+
+    return {
+      userId: auth?.user_id || null,
+      email: auth?.email || "",
+      role: auth?.role || "",
+    };
+  } catch (error) {
+    return {};
+  }
+}
+
+function getCreditResultAuditValues(item) {
+  return {
+    credit_result_status: item?.credit_result_status || null,
+    credit_disbursed_amount: item?.credit_disbursed_amount ?? null,
+    credit_disbursed_date: item?.credit_disbursed_date || null,
+    credit_result_source: item?.credit_result_source || null,
+    credit_confirmed_at: item?.credit_confirmed_at || null,
+    credit_confirmed_by: item?.credit_confirmed_by || null,
+  };
+}
+
 export default function ApplicationDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -293,6 +343,13 @@ export default function ApplicationDetailPage() {
   const [flagLoading, setFlagLoading] = useState(false);
   const [flagMessage, setFlagMessage] = useState("");
 const [updatingFlagId, setUpdatingFlagId] = useState(null);
+  const [manualAuditStatus, setManualAuditStatus] = useState("pending");
+  const [manualAuditAmount, setManualAuditAmount] = useState("");
+  const [manualAuditDate, setManualAuditDate] = useState("");
+  const [manualAuditNote, setManualAuditNote] = useState("");
+  const [manualAuditLoading, setManualAuditLoading] = useState(false);
+  const [manualAuditMessage, setManualAuditMessage] = useState("");
+  const [manualAuditError, setManualAuditError] = useState("");
 
   const organizationMap = useMemo(() => {
     const map = {};
@@ -357,6 +414,19 @@ const [updatingFlagId, setUpdatingFlagId] = useState(null);
     if (id) fetchData();
   }, [id]);
 
+  useEffect(() => {
+    if (!application?.id) return;
+
+    setManualAuditStatus(application.credit_result_status || "pending");
+    setManualAuditAmount(
+      application.credit_disbursed_amount === null ||
+        application.credit_disbursed_amount === undefined
+        ? ""
+        : String(application.credit_disbursed_amount)
+    );
+    setManualAuditDate(formatDateInput(application.credit_disbursed_date));
+  }, [application?.id]);
+
   async function updateStatus(nextStatus) {
     if (!application?.id) return;
 
@@ -379,6 +449,102 @@ const [updatingFlagId, setUpdatingFlagId] = useState(null);
     setApplication(data);
     setPageMessage("Müraciətin statusu yeniləndi.");
     setUpdatingStatus(false);
+  }
+
+  async function submitManualAuditResult(event) {
+    event.preventDefault();
+
+    if (!application?.id) return;
+
+    setManualAuditError("");
+    setManualAuditMessage("");
+
+    const nextStatus = manualAuditStatus.trim();
+    const isDisbursed = nextStatus === "disbursed";
+    const cleanNote = manualAuditNote.trim();
+
+    if (!nextStatus) {
+      setManualAuditError("Kredit nəticəsi statusu seçilməlidir.");
+      return;
+    }
+
+    const updatePayload = {
+      credit_result_status: nextStatus,
+      credit_result_source: "manual_audit",
+      credit_confirmed_at: new Date().toISOString(),
+      credit_confirmed_by: "",
+    };
+
+    if (isDisbursed) {
+      const amount = Number(manualAuditAmount);
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setManualAuditError("Kredit verilib seçiləndə verilən kredit məbləği 0-dan böyük olmalıdır.");
+        return;
+      }
+
+      if (!manualAuditDate) {
+        setManualAuditError("Kredit verilib seçiləndə kreditin verilmə tarixi daxil edilməlidir.");
+        return;
+      }
+
+      updatePayload.credit_disbursed_amount = amount;
+      updatePayload.credit_disbursed_date = manualAuditDate;
+    }
+
+    const admin = readStoredAdmin();
+    updatePayload.credit_confirmed_by = admin.email || admin.userId || "manual_audit";
+
+    const oldValues = getCreditResultAuditValues(application);
+
+    setManualAuditLoading(true);
+
+    const { data, error } = await supabase
+      .from("applications")
+      .update(updatePayload)
+      .eq("id", Number(application.id))
+      .select("*")
+      .single();
+
+    if (error) {
+      setManualAuditError("Manual audit nəticəsi yenilənmədi: " + error.message);
+      setManualAuditLoading(false);
+      return;
+    }
+
+    const newValues = getCreditResultAuditValues(data);
+
+    const { error: logError } = await supabase
+      .from("application_status_logs")
+      .insert([
+        {
+          application_id: application.id,
+          referral_id: application.referral_id || null,
+          status_type: "credit_result_status",
+          old_status: application.credit_result_status || null,
+          new_status: nextStatus,
+          changed_by_user_id: admin.userId || null,
+          changed_by_role: admin.role || "",
+          changed_by_email: admin.email || "",
+          source: "manual_audit",
+          note: cleanNote || null,
+          old_values: oldValues,
+          new_values: newValues,
+        },
+      ]);
+
+    setApplication(data);
+    setManualAuditLoading(false);
+
+    if (logError) {
+      setManualAuditError(
+        "Nəticə yeniləndi, amma audit log yazılmadı: " + logError.message
+      );
+      return;
+    }
+
+    setManualAuditMessage("Manual audit nəticəsi yadda saxlandı.");
+    setManualAuditNote("");
   }
 
   async function createProblemFlag() {
@@ -782,6 +948,103 @@ async function updateFlagStatus(flagId, nextStatus) {
 
         <section style={styles.panel}>
           <PanelHeader
+            title="Manual audit nəticəsi"
+            desc="Bank kabineti hazır olana qədər xüsusi hallar üçün admin audit nəticəsi."
+          />
+
+          {manualAuditMessage ? (
+            <div style={styles.inlineMessage}>{manualAuditMessage}</div>
+          ) : null}
+
+          {manualAuditError ? (
+            <div style={styles.errorBox}>{manualAuditError}</div>
+          ) : null}
+
+          <form onSubmit={submitManualAuditResult} style={styles.auditForm}>
+            <div style={styles.formBlock}>
+              <label style={styles.formLabel}>Kredit nəticəsi statusu</label>
+              <select
+                value={manualAuditStatus}
+                onChange={(e) => setManualAuditStatus(e.target.value)}
+                disabled={manualAuditLoading}
+                style={{
+                  ...styles.adminSelect,
+                  ...(manualAuditLoading ? styles.disabled : {}),
+                }}
+              >
+                {CREDIT_RESULT_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {manualAuditStatus === "disbursed" ? (
+              <div style={styles.auditTwoColumn}>
+                <div style={styles.formBlock}>
+                  <label style={styles.formLabel}>Verilən kredit məbləği</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={manualAuditAmount}
+                    onChange={(e) => setManualAuditAmount(e.target.value)}
+                    disabled={manualAuditLoading}
+                    style={{
+                      ...styles.adminSelect,
+                      ...(manualAuditLoading ? styles.disabled : {}),
+                    }}
+                  />
+                </div>
+
+                <div style={styles.formBlock}>
+                  <label style={styles.formLabel}>Kreditin verilmə tarixi</label>
+                  <input
+                    type="date"
+                    value={manualAuditDate}
+                    onChange={(e) => setManualAuditDate(e.target.value)}
+                    disabled={manualAuditLoading}
+                    style={{
+                      ...styles.adminSelect,
+                      ...(manualAuditLoading ? styles.disabled : {}),
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <div style={styles.formBlock}>
+              <label style={styles.formLabel}>Qeyd</label>
+              <textarea
+                value={manualAuditNote}
+                onChange={(e) => setManualAuditNote(e.target.value)}
+                placeholder="Manual audit qeydi yazın"
+                disabled={manualAuditLoading}
+                style={{
+                  ...styles.textarea,
+                  ...(manualAuditLoading ? styles.disabledTextarea : {}),
+                }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={manualAuditLoading}
+              style={{
+                ...styles.primaryButton,
+                ...(manualAuditLoading ? styles.disabled : {}),
+              }}
+            >
+              {manualAuditLoading
+                ? "Yadda saxlanılır..."
+                : "Manual audit nəticəsini yadda saxla"}
+            </button>
+          </form>
+        </section>
+
+        <section style={styles.panel}>
+          <PanelHeader
             title="Problemli müştəri"
             desc="Müştərini problemli kimi işarələ və səbəb qeyd et."
           />
@@ -1021,6 +1284,17 @@ const styles = {
     lineHeight: 1.6,
   },
 
+  errorBox: {
+    background: "#fef2f2",
+    color: "#991b1b",
+    border: "1px solid #fecaca",
+    borderRadius: "14px",
+    padding: "12px 14px",
+    marginBottom: "14px",
+    fontSize: "14px",
+    lineHeight: 1.6,
+  },
+
   summaryGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -1166,6 +1440,17 @@ flagStatusSelect: {
     padding: "14px",
   },
 
+  auditForm: {
+    display: "grid",
+    gap: "14px",
+  },
+
+  auditTwoColumn: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "14px",
+  },
+
   formLabel: {
     display: "block",
     fontSize: "13px",
@@ -1193,6 +1478,12 @@ flagStatusSelect: {
 },
   },
 
+  disabledTextarea: {
+    background: "#f1f5f9",
+    color: "#94a3b8",
+    cursor: "not-allowed",
+  },
+
   dangerButton: {
     display: "inline-flex",
     alignItems: "center",
@@ -1203,6 +1494,22 @@ flagStatusSelect: {
     border: "1px solid #fecaca",
     background: "#fff1f2",
     color: "#991b1b",
+    padding: "0 18px",
+    fontSize: "14px",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+
+  primaryButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "44px",
+    borderRadius: "14px",
+    border: "1px solid #0f172a",
+    background: "#0f172a",
+    color: "#ffffff",
     padding: "0 18px",
     fontSize: "14px",
     fontWeight: 700,
