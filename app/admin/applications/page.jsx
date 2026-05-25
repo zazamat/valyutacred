@@ -30,6 +30,17 @@ const RISK_OPTIONS = [
 ];
 
 const COLUMN_STORAGE_KEY = "vabank_applications_visible_columns";
+const COLUMN_DEFAULTS_VERSION_KEY = "vabank_applications_visible_columns_version";
+const CURRENT_COLUMN_DEFAULTS_VERSION = "2";
+const MONETIZATION_COLUMN_KEYS = [
+  "referralId",
+  "monetizationModel",
+  "appliedMonetizationSource",
+  "leadFeeStatus",
+  "successFeeStatus",
+  "creditResultStatus",
+  "attributionExpiresAt",
+];
 
 const TABLE_COLUMNS = [
   { key: "id", label: "ID", exportable: true },
@@ -43,6 +54,13 @@ const TABLE_COLUMNS = [
   { key: "amount", label: "Məbləğ", exportable: true },
   { key: "term", label: "Müddət", exportable: true },
   { key: "distribution", label: "Paylaşım tipi", exportable: true },
+  { key: "referralId", label: "Referral ID", exportable: true },
+  { key: "monetizationModel", label: "Monetizasiya modeli", exportable: true },
+  { key: "appliedMonetizationSource", label: "Monetizasiya mənbəyi", exportable: true },
+  { key: "leadFeeStatus", label: "Lead fee status", exportable: true },
+  { key: "successFeeStatus", label: "Success fee status", exportable: true },
+  { key: "creditResultStatus", label: "Kredit nəticəsi", exportable: true },
+  { key: "attributionExpiresAt", label: "Attribution bitmə tarixi", exportable: true },
   { key: "risk", label: "Risk", exportable: true, align: "center" },
   { key: "status", label: "Status", exportable: true },
   { key: "action", label: "Əməliyyat", exportable: false },
@@ -62,6 +80,13 @@ const COLUMN_WIDTHS = {
   amount: 150,
   term: 125,
   distribution: 180,
+  referralId: 160,
+  monetizationModel: 190,
+  appliedMonetizationSource: 200,
+  leadFeeStatus: 165,
+  successFeeStatus: 175,
+  creditResultStatus: 170,
+  attributionExpiresAt: 190,
   risk: 110,
   status: 150,
   action: 150,
@@ -88,6 +113,76 @@ function getDistributionLabel(value) {
   return DISTRIBUTION_OPTIONS.find((item) => item.value === value)?.label || "-";
 }
 
+const MONETIZATION_MODEL_LABELS = {
+  lead_fee_only: "Yalnız lead fee",
+  success_fee_only: "Yalnız success fee",
+  hybrid: "Hybrid",
+  free_test: "Pulsuz/test",
+  disabled: "Deaktiv",
+};
+
+const APPLIED_MONETIZATION_SOURCE_LABELS = {
+  product: "Məhsul",
+  organization: "Təşkilat",
+  default: "Default",
+  manual_admin: "Manual admin",
+};
+
+const LEAD_FEE_STATUS_LABELS = {
+  not_charged: "Tutulmayıb",
+  charged: "Hesablanıb",
+  paid: "Ödənilib",
+  cancelled: "Ləğv edilib",
+  refunded: "Geri qaytarılıb",
+  disputed: "Mübahisəli",
+};
+
+const SUCCESS_FEE_STATUS_LABELS = {
+  not_applicable: "Tətbiq olunmur",
+  pending: "Gözləyir",
+  calculated: "Hesablanıb",
+  invoiced: "Fakturalanıb",
+  paid: "Ödənilib",
+  disputed: "Mübahisəli",
+  cancelled: "Ləğv edilib",
+};
+
+const CREDIT_RESULT_STATUS_LABELS = {
+  pending: "Gözləyir",
+  under_review: "Baxılır",
+  approved: "Təsdiqlənib",
+  rejected: "İmtina edilib",
+  customer_declined: "Müştəri imtina edib",
+  disbursed: "Kredit verilib",
+  expired: "Müddəti bitib",
+  unknown: "Naməlum",
+};
+
+function getMappedLabel(value, labels) {
+  if (!value) return "-";
+  return labels[value] || value;
+}
+
+function getMonetizationModelLabel(value) {
+  return getMappedLabel(value, MONETIZATION_MODEL_LABELS);
+}
+
+function getAppliedMonetizationSourceLabel(value) {
+  return getMappedLabel(value, APPLIED_MONETIZATION_SOURCE_LABELS);
+}
+
+function getLeadFeeStatusLabel(value) {
+  return getMappedLabel(value, LEAD_FEE_STATUS_LABELS);
+}
+
+function getSuccessFeeStatusLabel(value) {
+  return getMappedLabel(value, SUCCESS_FEE_STATUS_LABELS);
+}
+
+function getCreditResultStatusLabel(value) {
+  return getMappedLabel(value, CREDIT_RESULT_STATUS_LABELS);
+}
+
 function getRiskLabel(status) {
   if (status === "active") return "Problemli";
   if (status === "under_review") return "Araşdırılır";
@@ -110,6 +205,46 @@ function getStatusStyles(status) {
   }
 
   if (normalized === "rejected") {
+    return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  }
+
+  return { background: "#e2e8f0", color: "#334155", border: "1px solid #cbd5e1" };
+}
+
+function getFeeStatusStyles(status) {
+  if (status === "paid") {
+    return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  }
+
+  if (status === "charged" || status === "calculated" || status === "invoiced") {
+    return { background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  }
+
+  if (status === "pending" || status === "not_charged" || status === "not_applicable") {
+    return { background: "#f8fafc", color: "#475569", border: "1px solid #e2e8f0" };
+  }
+
+  if (status === "cancelled" || status === "refunded") {
+    return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  }
+
+  if (status === "disputed") {
+    return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  }
+
+  return { background: "#e2e8f0", color: "#334155", border: "1px solid #cbd5e1" };
+}
+
+function getCreditResultStatusStyles(status) {
+  if (status === "approved" || status === "disbursed") {
+    return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  }
+
+  if (status === "pending" || status === "under_review") {
+    return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  }
+
+  if (status === "rejected" || status === "customer_declined" || status === "expired") {
     return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
   }
 
@@ -180,6 +315,15 @@ function getExportValue(columnKey, item, riskMap) {
     amount: item.amount || "",
     term: item.term_months ? `${item.term_months} ay` : "",
     distribution: getDistributionLabel(item.distribution_type),
+    referralId: item.referral_id || "",
+    monetizationModel: getMonetizationModelLabel(item.monetization_model),
+    appliedMonetizationSource: getAppliedMonetizationSourceLabel(
+      item.applied_monetization_source
+    ),
+    leadFeeStatus: getLeadFeeStatusLabel(item.lead_fee_status),
+    successFeeStatus: getSuccessFeeStatusLabel(item.success_fee_status),
+    creditResultStatus: getCreditResultStatusLabel(item.credit_result_status),
+    attributionExpiresAt: formatDate(item.attribution_expires_at),
     risk: getRiskLabel(risk?.status),
     status: getStatusLabel(item.status),
   };
@@ -312,6 +456,7 @@ export default function ApplicationsPage() {
     try {
       const saved = localStorage.getItem(COLUMN_STORAGE_KEY);
       const parsed = saved ? JSON.parse(saved) : null;
+      const savedVersion = localStorage.getItem(COLUMN_DEFAULTS_VERSION_KEY);
 
       if (!Array.isArray(parsed) || !parsed.length) {
         return DEFAULT_VISIBLE_COLUMNS;
@@ -319,10 +464,21 @@ export default function ApplicationsPage() {
 
       const allowedKeys = TABLE_COLUMNS.map((column) => column.key);
       const cleanKeys = Array.from(
-  new Set(parsed.filter((key) => allowedKeys.includes(key)))
-);
+        new Set(parsed.filter((key) => allowedKeys.includes(key)))
+      );
 
-return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
+      if (!cleanKeys.length) return DEFAULT_VISIBLE_COLUMNS;
+
+      if (savedVersion !== CURRENT_COLUMN_DEFAULTS_VERSION) {
+        return Array.from(
+          new Set([
+            ...cleanKeys,
+            ...MONETIZATION_COLUMN_KEYS.filter((key) => allowedKeys.includes(key)),
+          ])
+        );
+      }
+
+      return cleanKeys;
     } catch (error) {
       return DEFAULT_VISIBLE_COLUMNS;
     }
@@ -331,6 +487,7 @@ return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
   useEffect(() => {
     try {
       localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(visibleColumnKeys));
+      localStorage.setItem(COLUMN_DEFAULTS_VERSION_KEY, CURRENT_COLUMN_DEFAULTS_VERSION);
     } catch (error) {}
   }, [visibleColumnKeys]);
 
@@ -621,6 +778,42 @@ return cleanKeys.length ? cleanKeys : DEFAULT_VISIBLE_COLUMNS;
     if (columnKey === "amount") return formatMoney(item.amount);
     if (columnKey === "term") return item.term_months ? `${item.term_months} ay` : "-";
     if (columnKey === "distribution") return getDistributionLabel(item.distribution_type);
+    if (columnKey === "referralId") return item.referral_id || "-";
+    if (columnKey === "monetizationModel") return getMonetizationModelLabel(item.monetization_model);
+    if (columnKey === "appliedMonetizationSource") {
+      return getAppliedMonetizationSourceLabel(item.applied_monetization_source);
+    }
+
+    if (columnKey === "leadFeeStatus") {
+      return (
+        <span style={{ ...styles.badge, ...getFeeStatusStyles(item.lead_fee_status) }}>
+          {getLeadFeeStatusLabel(item.lead_fee_status)}
+        </span>
+      );
+    }
+
+    if (columnKey === "successFeeStatus") {
+      return (
+        <span style={{ ...styles.badge, ...getFeeStatusStyles(item.success_fee_status) }}>
+          {getSuccessFeeStatusLabel(item.success_fee_status)}
+        </span>
+      );
+    }
+
+    if (columnKey === "creditResultStatus") {
+      return (
+        <span
+          style={{
+            ...styles.badge,
+            ...getCreditResultStatusStyles(item.credit_result_status),
+          }}
+        >
+          {getCreditResultStatusLabel(item.credit_result_status)}
+        </span>
+      );
+    }
+
+    if (columnKey === "attributionExpiresAt") return formatDate(item.attribution_expires_at);
 
     if (columnKey === "risk") {
       return risk ? (
