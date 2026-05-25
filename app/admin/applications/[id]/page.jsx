@@ -37,6 +37,59 @@ const FLAG_STATUS_LABELS = {
   rejected: "Əsassız sayıldı",
 };
 
+const MONETIZATION_MODEL_LABELS = {
+  lead_fee_only: "Yalnız lead fee",
+  success_fee_only: "Yalnız success fee",
+  hybrid: "Hybrid",
+  free_test: "Pulsuz/test",
+  disabled: "Deaktiv",
+};
+
+const APPLIED_MONETIZATION_SOURCE_LABELS = {
+  product: "Məhsul",
+  organization: "Təşkilat",
+  default: "Default",
+  manual_admin: "Manual admin",
+};
+
+const LEAD_FEE_STATUS_LABELS = {
+  not_charged: "Tutulmayıb",
+  charged: "Hesablanıb",
+  paid: "Ödənilib",
+  cancelled: "Ləğv edilib",
+  refunded: "Geri qaytarılıb",
+  disputed: "Mübahisəli",
+};
+
+const SUCCESS_FEE_STATUS_LABELS = {
+  not_applicable: "Tətbiq olunmur",
+  pending: "Gözləyir",
+  calculated: "Hesablanıb",
+  invoiced: "Fakturalanıb",
+  paid: "Ödənilib",
+  disputed: "Mübahisəli",
+  cancelled: "Ləğv edilib",
+};
+
+const CREDIT_RESULT_STATUS_LABELS = {
+  pending: "Gözləyir",
+  under_review: "Baxılır",
+  approved: "Təsdiqlənib",
+  rejected: "İmtina edilib",
+  customer_declined: "Müştəri imtina edib",
+  disbursed: "Kredit verilib",
+  expired: "Müddəti bitib",
+  unknown: "Naməlum",
+};
+
+const COMMISSION_DISPUTE_STATUS_LABELS = {
+  none: "Yoxdur",
+  suspected: "Şübhəli",
+  under_review: "Araşdırılır",
+  resolved_valid: "Təsdiqləndi",
+  resolved_invalid: "Əsassız sayıldı",
+};
+
 function normalizeStatus(status) {
   if (status === "processing") return "reviewing";
   if (status === "sent") return "approved";
@@ -45,6 +98,35 @@ function normalizeStatus(status) {
 
 function getDistributionLabel(value) {
   return DISTRIBUTION_OPTIONS.find((item) => item.value === value)?.label || "-";
+}
+
+function getMappedLabel(value, labels) {
+  if (value === null || value === undefined || value === "") return "-";
+  return labels[value] || value;
+}
+
+function getMonetizationModelLabel(value) {
+  return getMappedLabel(value, MONETIZATION_MODEL_LABELS);
+}
+
+function getAppliedMonetizationSourceLabel(value) {
+  return getMappedLabel(value, APPLIED_MONETIZATION_SOURCE_LABELS);
+}
+
+function getLeadFeeStatusLabel(value) {
+  return getMappedLabel(value, LEAD_FEE_STATUS_LABELS);
+}
+
+function getSuccessFeeStatusLabel(value) {
+  return getMappedLabel(value, SUCCESS_FEE_STATUS_LABELS);
+}
+
+function getCreditResultStatusLabel(value) {
+  return getMappedLabel(value, CREDIT_RESULT_STATUS_LABELS);
+}
+
+function getCommissionDisputeStatusLabel(value) {
+  return getMappedLabel(value, COMMISSION_DISPUTE_STATUS_LABELS);
 }
 
 function getDistributionStyles(value) {
@@ -103,10 +185,76 @@ function getFlagStatusStyles(status) {
   };
 }
 
+function getFeeStatusStyles(status) {
+  if (status === "paid") {
+    return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  }
+
+  if (status === "charged" || status === "calculated" || status === "invoiced") {
+    return { background: "#dbeafe", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  }
+
+  if (status === "pending" || status === "not_charged" || status === "not_applicable") {
+    return { background: "#f8fafc", color: "#475569", border: "1px solid #e2e8f0" };
+  }
+
+  if (status === "cancelled" || status === "refunded") {
+    return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  }
+
+  if (status === "disputed") {
+    return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  }
+
+  return { background: "#e2e8f0", color: "#334155", border: "1px solid #cbd5e1" };
+}
+
+function getCreditResultStatusStyles(status) {
+  if (status === "approved" || status === "disbursed") {
+    return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  }
+
+  if (status === "pending" || status === "under_review") {
+    return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  }
+
+  if (status === "rejected" || status === "customer_declined" || status === "expired") {
+    return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  }
+
+  return { background: "#e2e8f0", color: "#334155", border: "1px solid #cbd5e1" };
+}
+
+function getCommissionDisputeStatusStyles(status) {
+  if (status === "none") {
+    return { background: "#f8fafc", color: "#475569", border: "1px solid #e2e8f0" };
+  }
+
+  if (status === "suspected" || status === "under_review") {
+    return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  }
+
+  if (status === "resolved_valid") {
+    return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  }
+
+  if (status === "resolved_invalid") {
+    return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  }
+
+  return { background: "#e2e8f0", color: "#334155", border: "1px solid #cbd5e1" };
+}
+
 function formatMoney(value) {
   if (value === null || value === undefined || value === "") return "-";
   const number = Number(value || 0);
   return `${new Intl.NumberFormat("az-AZ").format(number)} AZN`;
+}
+
+function formatBoolean(value) {
+  if (value === true) return "Bəli";
+  if (value === false) return "Xeyr";
+  return "-";
 }
 
 function formatPercent(value) {
@@ -508,6 +656,127 @@ async function updateFlagStatus(flagId, nextStatus) {
             </div>
 
             <Info label="Seçilmiş təşkilat" value={selectedOrganizationName} />
+          </div>
+        </section>
+
+        <section style={styles.panel}>
+          <PanelHeader
+            title="Komissiya və kredit nəticəsi"
+            desc="Referral, monetizasiya snapshot-u və kredit nəticəsi üzrə read-only məlumatlar."
+          />
+
+          <div style={styles.infoGrid}>
+            <Info label="Referral ID" value={application.referral_id} />
+            <Info
+              label="Tətbiq olunan monetizasiya modeli"
+              value={getMonetizationModelLabel(application.monetization_model)}
+            />
+            <Info
+              label="Monetizasiya mənbəyi"
+              value={getAppliedMonetizationSourceLabel(
+                application.applied_monetization_source
+              )}
+            />
+            <Info
+              label="Lead fee aktivdir?"
+              value={formatBoolean(application.lead_fee_enabled)}
+            />
+            <Info
+              label="Lead fee məbləği"
+              value={formatMoney(application.lead_fee_amount)}
+            />
+            <Info
+              label="Lead fee status"
+              value={
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    ...getFeeStatusStyles(application.lead_fee_status),
+                  }}
+                >
+                  {getLeadFeeStatusLabel(application.lead_fee_status)}
+                </span>
+              }
+            />
+            <Info
+              label="Success fee aktivdir?"
+              value={formatBoolean(application.success_fee_enabled)}
+            />
+            <Info label="Success fee tipi" value={application.success_fee_type} />
+            <Info
+              label="Success fee faizi"
+              value={formatPercent(application.success_fee_percent)}
+            />
+            <Info
+              label="Success fee sabit məbləği"
+              value={formatMoney(application.success_fee_fixed_amount)}
+            />
+            <Info
+              label="Success fee məbləği"
+              value={formatMoney(application.success_fee_amount)}
+            />
+            <Info
+              label="Success fee status"
+              value={
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    ...getFeeStatusStyles(application.success_fee_status),
+                  }}
+                >
+                  {getSuccessFeeStatusLabel(application.success_fee_status)}
+                </span>
+              }
+            />
+            <Info
+              label="Kredit nəticəsi statusu"
+              value={
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    ...getCreditResultStatusStyles(
+                      application.credit_result_status
+                    ),
+                  }}
+                >
+                  {getCreditResultStatusLabel(application.credit_result_status)}
+                </span>
+              }
+            />
+            <Info
+              label="Verilən kredit məbləği"
+              value={formatMoney(application.credit_disbursed_amount)}
+            />
+            <Info
+              label="Kreditin verilmə tarixi"
+              value={formatDateTime(application.credit_disbursed_date)}
+            />
+            <Info
+              label="Kredit nəticəsi mənbəyi"
+              value={application.credit_result_source}
+            />
+            <Info
+              label="Attribution bitmə tarixi"
+              value={formatDateTime(application.attribution_expires_at)}
+            />
+            <Info
+              label="Commission dispute status"
+              value={
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    ...getCommissionDisputeStatusStyles(
+                      application.commission_dispute_status
+                    ),
+                  }}
+                >
+                  {getCommissionDisputeStatusLabel(
+                    application.commission_dispute_status
+                  )}
+                </span>
+              }
+            />
+            <Info label="Commission notes" value={application.commission_notes} />
           </div>
         </section>
 
