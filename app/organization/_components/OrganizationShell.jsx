@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 const menuGroups = [
@@ -52,11 +52,59 @@ function isRouteActive(pathname, href) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function readOrganizationAuthSnapshot() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = localStorage.getItem("valyutacred_auth");
+    const auth = raw ? JSON.parse(raw) : null;
+
+    if (!auth?.authenticated) return null;
+    if (auth.role !== "organization_user") return null;
+    if (auth.status !== "active") return null;
+    if (!auth.organization_id) return null;
+
+    return {
+      id: auth.user_id,
+      email: auth.email || "",
+      full_name: auth.full_name || "",
+      role: auth.role,
+      status: auth.status,
+      organization_id: auth.organization_id,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function OrganizationShell({ children }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [organizationUser, setOrganizationUser] = useState(null);
+  const [authMessage, setAuthMessage] = useState("Organization kabinet yoxlanilir...");
+
+  useEffect(() => {
+    setMounted(true);
+
+    const snapshot = readOrganizationAuthSnapshot();
+
+    if (!snapshot) {
+      setOrganizationUser(null);
+      setAuthMessage("Giris sehifesine yonlendirilir...");
+      setIsCheckingAuth(false);
+      router.replace("/login");
+      return;
+    }
+
+    setOrganizationUser(snapshot);
+    setAuthMessage("");
+    setIsCheckingAuth(false);
+  }, [router]);
 
   useEffect(() => {
     const syncScreen = () => {
@@ -88,6 +136,26 @@ export default function OrganizationShell({ children }) {
   }, [pathname]);
 
   const sidebarWidth = sidebarCollapsed ? 76 : 248;
+  const organizationLabel =
+    organizationUser?.full_name || organizationUser?.email || "Organization user";
+
+  if (!mounted || isCheckingAuth) {
+    return (
+      <div style={styles.loadingPage}>
+        <div style={styles.loadingCard}>{authMessage}</div>
+      </div>
+    );
+  }
+
+  if (!organizationUser) {
+    return (
+      <div style={styles.loadingPage}>
+        <div style={styles.loadingCard}>
+          {authMessage || "Giris sehifesine yonlendirilir..."}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.page}>
@@ -196,8 +264,10 @@ export default function OrganizationShell({ children }) {
           >
             {!sidebarCollapsed || isMobile ? (
               <div style={styles.orgText}>
-                <div style={styles.orgName}>Organization workspace</div>
-                <div style={styles.orgMeta}>Skeleton mode</div>
+                <div style={styles.orgName}>{organizationLabel}</div>
+                <div style={styles.orgMeta}>
+                  Organization #{organizationUser.organization_id}
+                </div>
               </div>
             ) : (
               <div style={styles.orgShort}>O</div>
@@ -205,7 +275,7 @@ export default function OrganizationShell({ children }) {
           </div>
 
           {!sidebarCollapsed || isMobile ? (
-            <div style={styles.safetyBadge}>Real data qoşulmayıb</div>
+            <div style={styles.safetyBadge}>RLS protected read-only</div>
           ) : null}
         </div>
       </aside>
@@ -252,6 +322,24 @@ const appFont =
   'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 const styles = {
+  loadingPage: {
+    minHeight: "100vh",
+    background: "#f8fafc",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontFamily: appFont,
+  },
+
+  loadingCard: {
+    background: "#ffffff",
+    border: "1px solid #dbe4ee",
+    borderRadius: "16px",
+    padding: "16px 20px",
+    color: "#475569",
+    fontSize: "14px",
+  },
+
   page: {
     minHeight: "100vh",
     background: "#f8fafc",
