@@ -1,3 +1,9 @@
+"use client";
+
+import {
+  PermissionDenied,
+  useOrganizationPermissions,
+} from "../_components/OrganizationPermissionsContext";
 import {
   EmptyState,
   PageHeader,
@@ -14,6 +20,12 @@ const balanceStats = [
 ];
 
 export default function OrganizationBalancePage() {
+  const { hasPermission } = useOrganizationPermissions();
+
+  if (!hasPermission("can_view_balance")) {
+    return <PermissionDenied />;
+  }
+
   return (
     <div>
       <PageHeader

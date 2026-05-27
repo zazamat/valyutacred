@@ -10,6 +10,7 @@ import {
   ORGANIZATION_STATUSES,
   APPROVAL_STATUSES,
 } from "../../../../lib/admin-options";
+import OrganizationPermissionsPanel from "../_components/OrganizationPermissionsPanel";
 
 const slugify = (text = "") =>
   text
@@ -561,6 +562,8 @@ export default function OrganizationSettingsPage() {
       </div>
 
       {message ? <div style={styles.messageBox}>{message}</div> : null}
+
+      <OrganizationPermissionsPanel organizations={organizations} />
 
       <div style={styles.topGrid}>
         <section style={styles.panel}>

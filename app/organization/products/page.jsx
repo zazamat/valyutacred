@@ -1,3 +1,9 @@
+"use client";
+
+import {
+  PermissionDenied,
+  useOrganizationPermissions,
+} from "../_components/OrganizationPermissionsContext";
 import {
   EmptyState,
   PageHeader,
@@ -6,6 +12,12 @@ import {
 } from "../_components/OrganizationPlaceholders";
 
 export default function OrganizationProductsPage() {
+  const { hasPermission } = useOrganizationPermissions();
+
+  if (!hasPermission("can_manage_products")) {
+    return <PermissionDenied />;
+  }
+
   return (
     <div>
       <PageHeader
