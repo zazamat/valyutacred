@@ -37,6 +37,15 @@ const MATCH_SELECT = `
   )
 `;
 
+const TRANSACTION_SELECT = `
+  id,
+  transaction_type,
+  amount,
+  direction,
+  status,
+  created_at
+`;
+
 function normalizeRows(matches) {
   return matches.map((match) => {
     const application = Array.isArray(match.applications)
@@ -64,6 +73,15 @@ function formatDate(value) {
   }).format(date);
 }
 
+function isCurrentMonth(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const now = new Date();
+  return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+}
+
 function getStatusTone(status) {
   if (status === "approved" || status === "disbursed" || status === "sent") {
     return styles.badgeSuccess;
@@ -77,37 +95,22 @@ function getStatusTone(status) {
   return styles.badgeInfo;
 }
 
-function calculateSpent(matches) {
-  return matches.reduce((sum, match) => {
-    const app = match.application || {};
-    const leadAmount =
-      match.lead_fee_status === "charged" || match.lead_fee_status === "paid"
-        ? Number(app.lead_fee_amount || 0)
-        : 0;
-    const successAmount =
-      match.success_fee_status === "calculated" ||
-      match.success_fee_status === "invoiced" ||
-      match.success_fee_status === "paid"
-        ? Number(app.success_fee_amount || 0)
-        : 0;
-
-    return sum + leadAmount + successAmount;
-  }, 0);
-}
-
 export default function OrganizationDashboardPage() {
   const { organization, hasPermission } = useOrganizationPermissions();
   const canViewApplications = hasPermission("can_view_applications");
   const canViewBalance = hasPermission("can_view_balance");
   const [matches, setMatches] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    if (!canViewApplications) {
+    if (!canViewApplications && !canViewBalance) {
       setLoading(false);
       return;
     }
+
+    if (canViewBalance && !organization?.id) return;
 
     let active = true;
 
@@ -115,23 +118,48 @@ export default function OrganizationDashboardPage() {
       setLoading(true);
       setErrorMessage("");
 
-      const { data, error } = await supabase
-        .from("application_organization_matches")
-        .select(MATCH_SELECT)
-        .in("source", ["only_selected", "admin_assigned"])
-        .eq("visibility_status", "assigned")
-        .order("matched_at", { ascending: false });
+      const matchesQuery = canViewApplications
+        ? supabase
+            .from("application_organization_matches")
+            .select(MATCH_SELECT)
+            .in("source", ["only_selected", "admin_assigned"])
+            .eq("visibility_status", "assigned")
+            .order("matched_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null });
+
+      const transactionsQuery = canViewBalance
+        ? supabase
+            .from("organization_balance_transactions")
+            .select(TRANSACTION_SELECT)
+            .eq("organization_id", organization.id)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null });
+
+      const [matchesRes, transactionsRes] = await Promise.all([
+        matchesQuery,
+        transactionsQuery,
+      ]);
 
       if (!active) return;
 
-      if (error) {
+      if (matchesRes.error) {
         setMatches([]);
-        setErrorMessage("Dashboard məlumatları yüklənmədi: " + error.message);
+        setTransactions(transactionsRes.data || []);
+        setErrorMessage("Dashboard məlumatları yüklənmədi: " + matchesRes.error.message);
         setLoading(false);
         return;
       }
 
-      setMatches(normalizeRows(data || []));
+      if (transactionsRes.error) {
+        setMatches(normalizeRows(matchesRes.data || []));
+        setTransactions([]);
+        setErrorMessage("Balans əməliyyatları yüklənmədi: " + transactionsRes.error.message);
+        setLoading(false);
+        return;
+      }
+
+      setMatches(normalizeRows(matchesRes.data || []));
+      setTransactions(transactionsRes.data || []);
       setLoading(false);
     }
 
@@ -140,20 +168,17 @@ export default function OrganizationDashboardPage() {
     return () => {
       active = false;
     };
-  }, [canViewApplications]);
+  }, [canViewApplications, canViewBalance, organization?.id]);
 
   const dashboard = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const thisMonthMatches = matches.filter((match) => {
-      const date = new Date(match.assigned_at || match.matched_at || "");
-      return (
-        !Number.isNaN(date.getTime()) &&
-        date.getMonth() === currentMonth &&
-        date.getFullYear() === currentYear
-      );
-    });
+    const spentThisMonth = transactions
+      .filter(
+        (item) =>
+          item.direction === "debit" &&
+          item.status === "completed" &&
+          isCurrentMonth(item.created_at)
+      )
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
     return {
       newApplications: matches.filter((item) => item.application?.status === "new").length,
@@ -170,10 +195,10 @@ export default function OrganizationDashboardPage() {
       disbursed: matches.filter(
         (item) => item.application?.credit_result_status === "disbursed"
       ).length,
-      spentThisMonth: calculateSpent(thisMonthMatches),
+      spentThisMonth,
       balance: organization?.balance ?? 0,
     };
-  }, [matches, organization]);
+  }, [matches, transactions, organization]);
 
   const stats = [
     { title: "Yeni müraciətlər", value: loading ? "-" : dashboard.newApplications },
@@ -184,7 +209,7 @@ export default function OrganizationDashboardPage() {
     {
       title: "Bu ay xərclənib",
       value: loading ? "-" : formatMoney(dashboard.spentThisMonth),
-      desc: "Lead və uğur komissiyası statuslarına əsasən hesablanır.",
+      desc: "Tamamlanmış məxaric balans əməliyyatlarına əsasən hesablanır.",
     },
     {
       title: "Cari balans",
@@ -194,6 +219,12 @@ export default function OrganizationDashboardPage() {
   ];
 
   const recentMatches = matches.slice(0, 6);
+  const completedDebitCount = transactions.filter(
+    (item) => item.direction === "debit" && item.status === "completed"
+  ).length;
+  const pendingDebitCount = transactions.filter(
+    (item) => item.direction === "debit" && item.status === "pending"
+  ).length;
 
   return (
     <div>
@@ -257,29 +288,17 @@ export default function OrganizationDashboardPage() {
         </SectionPanel>
 
         <SectionPanel
-          title="Komissiya xülasəsi"
-          desc="Hər müraciət üçün tətbiq olunan ödəniş modeli ayrıca göstərilir."
+          title="Balans xülasəsi"
+          desc="Xərclər balans əməliyyatları tarixçəsindən hesablanır."
         >
           <div style={styles.feeList}>
             <div style={styles.feeRow}>
-              <span>Lead haqqı tutulmuş müraciətlər</span>
-              <strong>
-                {
-                  matches.filter((item) =>
-                    ["charged", "paid"].includes(item.lead_fee_status)
-                  ).length
-                }
-              </strong>
+              <span>Tamamlanmış məxaric əməliyyatları</span>
+              <strong>{completedDebitCount}</strong>
             </div>
             <div style={styles.feeRow}>
-              <span>Uğur komissiyası aktiv olanlar</span>
-              <strong>
-                {
-                  matches.filter((item) =>
-                    ["calculated", "invoiced", "paid"].includes(item.success_fee_status)
-                  ).length
-                }
-              </strong>
+              <span>Gözləyən məxaric əməliyyatları</span>
+              <strong>{pendingDebitCount}</strong>
             </div>
             <div style={styles.feeRow}>
               <span>Əsas monetizasiya modeli</span>

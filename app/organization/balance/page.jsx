@@ -15,21 +15,20 @@ import {
   pageStyles,
 } from "../_components/OrganizationPlaceholders";
 
-const MATCH_SELECT = `
+const TRANSACTION_SELECT = `
   id,
-  lead_fee_status,
-  success_fee_status,
-  monetization_model,
-  matched_at,
-  assigned_at,
-  applications (
-    id,
-    referral_id,
-    full_name,
-    lead_fee_amount,
-    success_fee_amount,
-    credit_result_status
-  )
+  organization_id,
+  application_id,
+  referral_id,
+  transaction_type,
+  amount,
+  direction,
+  balance_before,
+  balance_after,
+  description,
+  source,
+  status,
+  created_at
 `;
 
 function formatMoney(value) {
@@ -45,38 +44,30 @@ function formatDate(value) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(date);
 }
 
-function normalizeRows(matches) {
-  return matches.map((match) => {
-    const application = Array.isArray(match.applications)
-      ? match.applications[0]
-      : match.applications;
+function isCurrentMonth(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
 
-    return { ...match, application: application || null };
-  });
+  const now = new Date();
+  return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
 }
 
-function chargeAmount(match) {
-  const app = match.application || {};
-  const leadAmount =
-    match.lead_fee_status === "charged" || match.lead_fee_status === "paid"
-      ? Number(app.lead_fee_amount || 0)
-      : 0;
-  const successAmount =
-    match.success_fee_status === "calculated" ||
-    match.success_fee_status === "invoiced" ||
-    match.success_fee_status === "paid"
-      ? Number(app.success_fee_amount || 0)
-      : 0;
-
-  return leadAmount + successAmount;
+function getTone(value) {
+  if (value === "credit" || value === "completed") return styles.badgeSuccess;
+  if (value === "debit" || value === "pending") return styles.badgeWarning;
+  if (value === "cancelled" || value === "refunded") return styles.badgeDanger;
+  return styles.badgeNeutral;
 }
 
 export default function OrganizationBalancePage() {
   const { organization, hasPermission } = useOrganizationPermissions();
-  const [matches, setMatches] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -86,6 +77,8 @@ export default function OrganizationBalancePage() {
       return;
     }
 
+    if (!organization?.id) return;
+
     let active = true;
 
     async function loadBalance() {
@@ -93,22 +86,22 @@ export default function OrganizationBalancePage() {
       setErrorMessage("");
 
       const { data, error } = await supabase
-        .from("application_organization_matches")
-        .select(MATCH_SELECT)
-        .in("source", ["only_selected", "admin_assigned"])
-        .eq("visibility_status", "assigned")
-        .order("matched_at", { ascending: false });
+        .from("organization_balance_transactions")
+        .select(TRANSACTION_SELECT)
+        .eq("organization_id", organization.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
 
       if (!active) return;
 
       if (error) {
-        setMatches([]);
-        setErrorMessage("Balans məlumatları yüklənmədi: " + error.message);
+        setTransactions([]);
+        setErrorMessage("Balans əməliyyatları yüklənmədi: " + error.message);
         setLoading(false);
         return;
       }
 
-      setMatches(normalizeRows(data || []));
+      setTransactions(data || []);
       setLoading(false);
     }
 
@@ -117,50 +110,28 @@ export default function OrganizationBalancePage() {
     return () => {
       active = false;
     };
-  }, [hasPermission]);
+  }, [hasPermission, organization?.id]);
 
   const summary = useMemo(() => {
-    const now = new Date();
-    const thisMonthMatches = matches.filter((match) => {
-      const date = new Date(match.assigned_at || match.matched_at || "");
-      return (
-        !Number.isNaN(date.getTime()) &&
-        date.getMonth() === now.getMonth() &&
-        date.getFullYear() === now.getFullYear()
-      );
-    });
-    const spentThisMonth = thisMonthMatches.reduce(
-      (sum, match) => sum + chargeAmount(match),
-      0
-    );
-    const blocked = matches
-      .filter((match) => match.success_fee_status === "pending")
-      .reduce((sum, match) => sum + Number(match.application?.success_fee_amount || 0), 0);
+    const spentThisMonth = transactions
+      .filter(
+        (item) =>
+          item.direction === "debit" &&
+          item.status === "completed" &&
+          isCurrentMonth(item.created_at)
+      )
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+    const blocked = transactions
+      .filter((item) => item.direction === "debit" && item.status === "pending")
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
     return {
       balance: organization?.balance ?? 0,
       spentThisMonth,
       blocked,
     };
-  }, [matches, organization]);
-
-  const transactions = useMemo(() => {
-    return matches
-      .map((match) => {
-        const amount = chargeAmount(match);
-        if (!amount) return null;
-        return {
-          id: match.id,
-          date: match.assigned_at || match.matched_at,
-          title: match.application?.referral_id || `Müraciət #${match.application?.id}`,
-          customer: match.application?.full_name || "-",
-          model: labelFor(match.monetization_model),
-          amount,
-        };
-      })
-      .filter(Boolean)
-      .slice(0, 8);
-  }, [matches]);
+  }, [transactions, organization]);
 
   if (!hasPermission("can_view_balance")) {
     return <PermissionDenied />;
@@ -171,7 +142,7 @@ export default function OrganizationBalancePage() {
       <PageHeader
         kicker="Maliyyə"
         title="Balans"
-        subtitle="Cari balans, bu ay üzrə xərclər və müraciətlərə bağlı komissiya hərəkətləri."
+        subtitle="Cari balans, bu ay üzrə xərclər və balans əməliyyatları üzrə tarixçə."
       />
 
       {errorMessage ? <div style={styles.errorBox}>{errorMessage}</div> : null}
@@ -181,31 +152,31 @@ export default function OrganizationBalancePage() {
           <StatCard
             title="Cari balans"
             value={loading ? "-" : formatMoney(summary.balance)}
-            desc="Admin panelində təyin edilmiş təşkilat balansı."
+            desc="Təşkilatın cari balans göstəricisi."
           />
           <StatCard
             title="Bu ay xərclənib"
             value={loading ? "-" : formatMoney(summary.spentThisMonth)}
-            desc="Bu ay tutulmuş lead və uğur komissiyaları."
+            desc="Bu ay tamamlanmış məxaric əməliyyatlarının cəmi."
           />
           <StatCard
             title="Bloklanmış məbləğ"
             value={loading ? "-" : formatMoney(summary.blocked)}
-            desc="Nəticəsi gözlənən uğur komissiyası məbləğləri."
+            desc="Gözləyən məxaric əməliyyatları üzrə bloklanmış məbləğ."
           />
         </div>
       </section>
 
       <SectionPanel
         title="Son əməliyyatlar"
-        desc="Müraciətlər üzrə komissiya tutulmaları burada görünür."
+        desc="Balans artırmaları, lead haqqı, uğur komissiyası, bloklama və geri ödəniş əməliyyatları."
       >
-        {loading ? <div style={styles.stateBox}>Balans məlumatları yüklənir...</div> : null}
+        {loading ? <div style={styles.stateBox}>Balans əməliyyatları yüklənir...</div> : null}
 
         {!loading && !transactions.length ? (
           <EmptyState
             title="Balans əməliyyatları hələ yoxdur"
-            desc="Balans əməliyyatları aktivləşdirildikdən sonra xərclər burada görünəcək."
+            desc="Lead haqqı, uğur komissiyası və balans artırmaları aktivləşdikdən sonra əməliyyatlar burada görünəcək."
           />
         ) : null}
 
@@ -215,20 +186,42 @@ export default function OrganizationBalancePage() {
               <thead>
                 <tr>
                   <th style={styles.th}>Tarix</th>
-                  <th style={styles.th}>Müraciət</th>
-                  <th style={styles.th}>Müştəri</th>
-                  <th style={styles.th}>Model</th>
+                  <th style={styles.th}>Tip</th>
+                  <th style={styles.th}>Referral ID</th>
+                  <th style={styles.th}>Təsvir</th>
+                  <th style={styles.th}>İstiqamət</th>
                   <th style={styles.thRight}>Məbləğ</th>
+                  <th style={styles.thRight}>Əvvəlki balans</th>
+                  <th style={styles.thRight}>Son balans</th>
+                  <th style={styles.th}>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {transactions.map((item) => (
                   <tr key={item.id}>
-                    <td style={styles.td}>{formatDate(item.date)}</td>
-                    <td style={styles.tdStrong}>{item.title}</td>
-                    <td style={styles.td}>{item.customer}</td>
-                    <td style={styles.td}>{item.model}</td>
+                    <td style={styles.td}>{formatDate(item.created_at)}</td>
+                    <td style={styles.td}>
+                      <span style={{ ...styles.badge, ...styles.badgeNeutral }}>
+                        {labelFor(item.transaction_type)}
+                      </span>
+                    </td>
+                    <td style={styles.tdStrong}>
+                      {item.referral_id || (item.application_id ? `#${item.application_id}` : "-")}
+                    </td>
+                    <td style={styles.td}>{item.description || labelFor(item.source)}</td>
+                    <td style={styles.td}>
+                      <span style={{ ...styles.badge, ...getTone(item.direction) }}>
+                        {labelFor(item.direction)}
+                      </span>
+                    </td>
                     <td style={styles.tdRight}>{formatMoney(item.amount)}</td>
+                    <td style={styles.tdRight}>{formatMoney(item.balance_before)}</td>
+                    <td style={styles.tdRight}>{formatMoney(item.balance_after)}</td>
+                    <td style={styles.td}>
+                      <span style={{ ...styles.badge, ...getTone(item.status) }}>
+                        {labelFor(item.status)}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -274,7 +267,7 @@ const styles = {
   },
   table: {
     width: "100%",
-    minWidth: "780px",
+    minWidth: "1180px",
     tableLayout: "fixed",
     borderCollapse: "collapse",
   },
@@ -287,15 +280,18 @@ const styles = {
     color: "#64748b",
     fontSize: "13px",
     fontWeight: 700,
+    whiteSpace: "nowrap",
   },
   thRight: {
     textAlign: "right",
     padding: "14px",
     background: "#f8fafc",
     borderBottom: "1px solid #e2e8f0",
+    borderRight: "1px solid #e2e8f0",
     color: "#64748b",
     fontSize: "13px",
     fontWeight: 700,
+    whiteSpace: "nowrap",
   },
   td: {
     padding: "14px",
@@ -321,10 +317,41 @@ const styles = {
   tdRight: {
     padding: "14px",
     borderBottom: "1px solid #eef2f7",
+    borderRight: "1px solid #eef2f7",
     color: "#0f172a",
     fontSize: "14px",
     fontWeight: 800,
     textAlign: "right",
     whiteSpace: "nowrap",
+  },
+  badge: {
+    display: "inline-flex",
+    minHeight: "28px",
+    alignItems: "center",
+    borderRadius: "999px",
+    padding: "0 10px",
+    fontSize: "12px",
+    fontWeight: 750,
+    whiteSpace: "nowrap",
+  },
+  badgeNeutral: {
+    background: "#f8fafc",
+    color: "#475569",
+    border: "1px solid #e2e8f0",
+  },
+  badgeWarning: {
+    background: "#fef3c7",
+    color: "#92400e",
+    border: "1px solid #fde68a",
+  },
+  badgeSuccess: {
+    background: "#dcfce7",
+    color: "#166534",
+    border: "1px solid #bbf7d0",
+  },
+  badgeDanger: {
+    background: "#fee2e2",
+    color: "#991b1b",
+    border: "1px solid #fecaca",
   },
 };
