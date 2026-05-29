@@ -1,0 +1,15 @@
+
+> valyutacred@1.0.0 dev
+> next dev -p 3013
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3013
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1594ms
+ ○ Compiling / ...
+ ✓ Compiled / in 778ms (570 modules)
+ GET / 200 in 994ms
+ ✓ Compiled in 287ms (570 modules)
+[?25h

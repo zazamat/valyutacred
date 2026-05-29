@@ -1,0 +1,20 @@
+
+> valyutacred@1.0.0 dev
+> next dev -p 3023
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3023
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1764ms
+ ○ Compiling /api/admin/users ...
+ ✓ Compiled /api/admin/users in 564ms (91 modules)
+ GET /api/admin/users 500 in 679ms
+ ○ Compiling /admin/users ...
+ ✓ Compiled /admin/users in 2.4s (642 modules)
+ GET /admin/users 200 in 2586ms
+   Reload env: .env.local
+ ✓ Compiled in 180ms (288 modules)
+ ✓ Compiled in 52ms (288 modules)
+ ✓ Compiled in 131ms (288 modules)

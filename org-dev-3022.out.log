@@ -1,0 +1,25 @@
+
+> valyutacred@1.0.0 dev
+> next dev -p 3022
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3022
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1768ms
+ ○ Compiling /organization/applications/[id] ...
+ ✓ Compiled /organization/applications/[id] in 2.7s (497 modules)
+ GET /organization 200 in 2853ms
+ GET /organization/applications/test-id 200 in 3062ms
+ GET /organization 200 in 58ms
+ ✓ Compiled /organization/balance in 204ms (497 modules)
+ ✓ Compiled /organization/applications in 111ms (499 modules)
+ ✓ Compiled /organization/settings in 108ms (501 modules)
+ ✓ Compiled /organization/products in 105ms (503 modules)
+ ✓ Compiled /organization/product-settings in 122ms (505 modules)
+ ✓ Compiled /organization/statistics in 156ms (507 modules)
+ GET /organization/products 200 in 95ms
+ ✓ Compiled in 319ms (503 modules)
+ ✓ Compiled in 144ms (503 modules)
+ ✓ Compiled in 141ms (503 modules)
