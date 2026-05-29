@@ -1,29 +1,29 @@
 const mutedRows = ["", "", ""];
 
-export function PageHeader({ kicker, title, subtitle, badge = "Skeleton" }) {
+export function PageHeader({ kicker, title, subtitle, badge }) {
   return (
     <div style={styles.header}>
       <div>
         <div style={styles.kicker}>{kicker}</div>
         <h1 style={styles.title}>{title}</h1>
-        <p style={styles.subtitle}>{subtitle}</p>
+        {subtitle ? <p style={styles.subtitle}>{subtitle}</p> : null}
       </div>
 
-      <div style={styles.demoNotice}>{badge}</div>
+      {badge ? <div style={styles.demoNotice}>{badge}</div> : null}
     </div>
   );
 }
 
-export function StatCard({ title, value, desc }) {
+export function StatCard({ title, value, desc, tag }) {
   return (
     <div style={styles.card}>
       <div style={styles.cardTop}>
         <div style={styles.cardTitle}>{title}</div>
-        <span style={styles.cardTag}>Placeholder</span>
+        {tag ? <span style={styles.cardTag}>{tag}</span> : null}
       </div>
 
       <div style={styles.cardValue}>{value}</div>
-      <div style={styles.cardDesc}>{desc}</div>
+      {desc ? <div style={styles.cardDesc}>{desc}</div> : null}
     </div>
   );
 }
@@ -44,8 +44,8 @@ export function SectionPanel({ title, desc, children }) {
 }
 
 export function EmptyState({
-  title = "Real organization datası hələ qoşulmayıb",
-  desc = "Bu ekran hazırda yalnız struktur və UI yoxlaması üçün placeholder məlumat göstərir.",
+  title = "Məlumat tapılmadı",
+  desc = "Məlumat aktivləşdirildikdən sonra bu bölmədə görünəcək.",
 }) {
   return (
     <div style={styles.emptyState}>
@@ -99,7 +99,7 @@ export function PlaceholderList({ items = mutedRows }) {
       {items.map((item, index) => (
         <div key={`${item}-${index}`} style={styles.listRow}>
           <div style={styles.listMain}>
-            <div style={styles.listTitle}>{item || "Placeholder qeyd"}</div>
+            <div style={styles.listTitle}>{item || "Məlumat gözlənilir"}</div>
             <div style={styles.skeletonLine} />
           </div>
           <span style={styles.cardTag}>Gözləyir</span>
@@ -177,7 +177,7 @@ const styles = {
   card: {
     background: "#ffffff",
     border: "1px solid #e2e8f0",
-    borderRadius: "18px",
+    borderRadius: "14px",
     padding: "18px",
     boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
     minHeight: "128px",
@@ -224,7 +224,7 @@ const styles = {
   panel: {
     background: "#ffffff",
     border: "1px solid #e2e8f0",
-    borderRadius: "20px",
+    borderRadius: "16px",
     padding: "18px",
     boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
   },
@@ -249,7 +249,7 @@ const styles = {
 
   emptyState: {
     minHeight: "90px",
-    borderRadius: "16px",
+    borderRadius: "14px",
     border: "1px dashed #cbd5e1",
     background: "#f8fafc",
     padding: "16px",

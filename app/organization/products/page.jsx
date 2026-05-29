@@ -7,12 +7,11 @@ import {
 import {
   EmptyState,
   PageHeader,
-  PlaceholderTable,
   SectionPanel,
 } from "../_components/OrganizationPlaceholders";
 
 export default function OrganizationProductsPage() {
-  const { hasPermission } = useOrganizationPermissions();
+  const { organization, hasPermission } = useOrganizationPermissions();
 
   if (!hasPermission("can_manage_products")) {
     return <PermissionDenied />;
@@ -23,22 +22,57 @@ export default function OrganizationProductsPage() {
       <PageHeader
         kicker="İdarəetmə"
         title="Məhsullar"
-        subtitle="Bankın kabinetdə görəcəyi məhsul siyahısı üçün skeleton görünüş."
+        subtitle="Bank məhsulları və komissiya qaydaları üzrə baxış."
       />
 
       <SectionPanel
-        title="Məhsul siyahısı"
-        desc="Admin məhsulları və təşkilat uyğunluğu bu mərhələdə query edilmir."
+        title="Məhsul ayarları"
+        desc="Məhsul səviyyəli qaydalar aktiv olduqda bank məhsulları burada idarə olunacaq."
       >
-        <PlaceholderTable
-          columns={["Məhsul", "Kateqoriya", "Status", "Lead qaydası"]}
-          rows={5}
-        />
-      </SectionPanel>
+        <div style={styles.infoGrid}>
+          <div style={styles.infoItem}>
+            <div style={styles.infoLabel}>Təşkilat</div>
+            <div style={styles.infoValue}>{organization?.name || "-"}</div>
+          </div>
+          <div style={styles.infoItem}>
+            <div style={styles.infoLabel}>Kabinet statusu</div>
+            <div style={styles.infoValue}>Aktiv</div>
+          </div>
+        </div>
 
-      <div style={{ marginTop: 18 }}>
-        <EmptyState />
-      </div>
+        <div style={{ marginTop: 14 }}>
+          <EmptyState
+            title="Məhsul siyahısı aktivləşdirilməyib"
+            desc="Məhsul əsaslı komissiya qaydaları qoşulduqdan sonra bank məhsulları və şərtləri burada görünəcək."
+          />
+        </div>
+      </SectionPanel>
     </div>
   );
 }
+
+const styles = {
+  infoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "12px",
+  },
+  infoItem: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: "12px",
+    padding: "14px",
+  },
+  infoLabel: {
+    fontSize: "12px",
+    color: "#64748b",
+    fontWeight: 700,
+    marginBottom: "7px",
+    textTransform: "uppercase",
+  },
+  infoValue: {
+    fontSize: "14px",
+    fontWeight: 750,
+    color: "#0f172a",
+  },
+};

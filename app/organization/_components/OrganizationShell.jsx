@@ -16,6 +16,17 @@ const menuGroups = [
     items: [{ href: "/organization", label: "Dashboard", short: "D" }],
   },
   {
+    title: "Müraciətlər",
+    items: [
+      {
+        href: "/organization/applications",
+        label: "Müraciətlər",
+        short: "M",
+        permission: "can_view_applications",
+      },
+    ],
+  },
+  {
     title: "Maliyyə",
     items: [
       {
@@ -23,17 +34,6 @@ const menuGroups = [
         label: "Balans",
         short: "B",
         permission: "can_view_balance",
-      },
-    ],
-  },
-  {
-    title: "Müraciətlər",
-    items: [
-      {
-        href: "/organization/applications",
-        label: "Müraciətlərim",
-        short: "M",
-        permission: "can_view_applications",
       },
     ],
   },
@@ -156,7 +156,9 @@ export default function OrganizationShell({ children }) {
           Promise.all([
             supabase
               .from("organizations")
-              .select("id, name, status, approval_status, cabinet_enabled")
+              .select(
+                "id, name, status, approval_status, cabinet_enabled, balance, monetization_model, lead_fee_enabled, lead_fee_amount, success_fee_enabled, success_fee_type, success_fee_percent, success_fee_fixed_amount"
+              )
               .eq("id", snapshot.organization_id)
               .maybeSingle(),
             supabase
@@ -304,7 +306,7 @@ export default function OrganizationShell({ children }) {
               {!sidebarCollapsed || isMobile ? (
                 <div style={styles.brandText}>
                   <div style={styles.brandTitle}>VaBank Cabinet</div>
-                  <div style={styles.brandSub}>organization paneli</div>
+                  <div style={styles.brandSub}>bank paneli</div>
                 </div>
               ) : null}
             </Link>
@@ -317,7 +319,7 @@ export default function OrganizationShell({ children }) {
                 title={sidebarCollapsed ? "Menyunu aç" : "Menyunu bağla"}
                 aria-label={sidebarCollapsed ? "Menyunu aç" : "Menyunu bağla"}
               >
-                {sidebarCollapsed ? "›" : "‹"}
+                {sidebarCollapsed ? ">" : "<"}
               </button>
             ) : (
               <button
@@ -384,7 +386,7 @@ export default function OrganizationShell({ children }) {
                 <div style={styles.orgText}>
                   <div style={styles.orgName}>{organizationLabel}</div>
                   <div style={styles.orgMeta}>
-                    Organization #{organizationUser.organization_id}
+                    Təşkilat #{organizationUser.organization_id}
                   </div>
                 </div>
               ) : (
@@ -393,7 +395,7 @@ export default function OrganizationShell({ children }) {
             </div>
 
             {!sidebarCollapsed || isMobile ? (
-              <div style={styles.safetyBadge}>RLS protected read-only</div>
+              <div style={styles.safetyBadge}>Baxış rejimi</div>
             ) : null}
           </div>
         </aside>
@@ -419,12 +421,12 @@ export default function OrganizationShell({ children }) {
 
               <div>
                 <div style={styles.topbarTitle}>{currentPageLabel}</div>
-                <div style={styles.topbarSub}>VaBank organization kabineti</div>
+                <div style={styles.topbarSub}>VaBank bank kabineti</div>
               </div>
             </div>
 
             <div style={styles.topbarRight}>
-              <div style={styles.roleBadge}>Bank cabinet</div>
+              <div style={styles.roleBadge}>Bank kabineti</div>
             </div>
           </header>
 
@@ -535,8 +537,8 @@ const styles = {
     border: "1px solid #e2e8f0",
     background: "#ffffff",
     color: "#334155",
-    fontSize: "20px",
-    fontWeight: 600,
+    fontSize: "18px",
+    fontWeight: 700,
     cursor: "pointer",
     fontFamily: "inherit",
     display: "flex",

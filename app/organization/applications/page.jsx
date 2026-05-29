@@ -14,6 +14,8 @@ import {
   SectionPanel,
 } from "../_components/OrganizationPlaceholders";
 
+const COLUMN_STORAGE_KEY = "vabank_org_applications_columns";
+
 const MATCH_SELECT = `
   id,
   application_id,
@@ -38,7 +40,9 @@ const MATCH_SELECT = `
     status,
     distribution_type,
     referral_id,
-    credit_result_status
+    credit_result_status,
+    lead_fee_amount,
+    success_fee_amount
   )
 `;
 
@@ -59,28 +63,31 @@ function formatDate(value) {
   }).format(date);
 }
 
-function getStatusStyle(status) {
-  if (status === "approved" || status === "sent") return styles.badgeSuccess;
-  if (status === "rejected") return styles.badgeDanger;
-  if (status === "reviewing" || status === "processing") return styles.badgeWarning;
-  return styles.badgeInfo;
-}
-
 function normalizeRows(matches) {
   return matches.map((match) => {
     const application = Array.isArray(match.applications)
       ? match.applications[0]
       : match.applications;
 
-    return {
-      ...match,
-      application: application || null,
-    };
+    return { ...match, application: application || null };
   });
 }
 
+function getStatusStyle(status) {
+  if (status === "approved" || status === "sent" || status === "disbursed") {
+    return styles.badgeSuccess;
+  }
+  if (status === "rejected" || status === "customer_declined" || status === "expired") {
+    return styles.badgeDanger;
+  }
+  if (status === "reviewing" || status === "processing" || status === "under_review") {
+    return styles.badgeWarning;
+  }
+  return styles.badgeInfo;
+}
+
 function downloadTextFile(filename, content, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
+  const blob = new Blob(["\uFEFF" + content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -108,16 +115,16 @@ export default function OrganizationApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
-  const [rowLimit, setRowLimit] = useState(10);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [resultFilter, setResultFilter] = useState("all");
+  const [rowLimit, setRowLimit] = useState("25");
   const [exportOpen, setExportOpen] = useState(false);
   const [columnPanelOpen, setColumnPanelOpen] = useState(false);
   const [tableAvailableWidth, setTableAvailableWidth] = useState(0);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
     if (typeof window === "undefined") return null;
     try {
-      return JSON.parse(
-        window.localStorage.getItem("vabank_org_applications_columns") || "null"
-      );
+      return JSON.parse(window.localStorage.getItem(COLUMN_STORAGE_KEY) || "null");
     } catch {
       return null;
     }
@@ -191,14 +198,10 @@ export default function OrganizationApplicationsPage() {
         render: (match) => {
           const application = match.application || {};
           const value = application.referral_id || match.referral_id || "-";
-
           return (
             <div style={styles.primaryCell}>
               {application.id && canViewDetail ? (
-                <Link
-                  href={`/organization/applications/${application.id}`}
-                  style={styles.detailLink}
-                >
+                <Link href={`/organization/applications/${application.id}`} style={styles.detailLink}>
                   {value}
                 </Link>
               ) : (
@@ -208,8 +211,7 @@ export default function OrganizationApplicationsPage() {
             </div>
           );
         },
-        exportValue: (match) =>
-          match.application?.referral_id || match.referral_id || "",
+        exportValue: (match) => match.application?.referral_id || match.referral_id || "",
       },
       {
         key: "customer",
@@ -218,20 +220,16 @@ export default function OrganizationApplicationsPage() {
         render: (match) => {
           const application = match.application || {};
           const value = application.full_name || "-";
-
           return (
             <div style={styles.primaryCell}>
               {application.id && canViewDetail ? (
-                <Link
-                  href={`/organization/applications/${application.id}`}
-                  style={styles.detailLink}
-                >
+                <Link href={`/organization/applications/${application.id}`} style={styles.detailLink}>
                   {value}
                 </Link>
               ) : (
                 value
               )}
-              <div style={styles.cellMeta}>App #{application.id || match.application_id}</div>
+              <div style={styles.cellMeta}>Müraciət #{application.id || match.application_id}</div>
             </div>
           );
         },
@@ -295,14 +293,24 @@ export default function OrganizationApplicationsPage() {
         label: "Nəticə",
         width: 170,
         render: (match) => (
-          <div>
+          <span style={{ ...styles.badge, ...getStatusStyle(match.application?.credit_result_status) }}>
             {labelFor(match.application?.credit_result_status)}
-            {canViewMonetization ? (
-              <div style={styles.cellMeta}>{labelFor(match.lead_fee_status || "not_charged")}</div>
-            ) : null}
-          </div>
+          </span>
         ),
         exportValue: (match) => labelFor(match.application?.credit_result_status, ""),
+      },
+      {
+        key: "model",
+        label: "Ödəniş modeli",
+        width: 190,
+        hidden: !canViewMonetization,
+        render: (match) => (
+          <div>
+            {labelFor(match.monetization_model)}
+            <div style={styles.cellMeta}>{labelFor(match.lead_fee_status || "not_charged")}</div>
+          </div>
+        ),
+        exportValue: (match) => labelFor(match.monetization_model, ""),
       },
       {
         key: "source",
@@ -317,6 +325,20 @@ export default function OrganizationApplicationsPage() {
         width: 145,
         render: (match) => formatDate(match.assigned_at || match.matched_at),
         exportValue: (match) => formatDate(match.assigned_at || match.matched_at),
+      },
+      {
+        key: "action",
+        label: "Əməliyyat",
+        width: 120,
+        render: (match) =>
+          match.application?.id && canViewDetail ? (
+            <Link href={`/organization/applications/${match.application.id}`} style={styles.actionBtn}>
+              Bax
+            </Link>
+          ) : (
+            "-"
+          ),
+        exportValue: () => "",
       },
     ];
 
@@ -349,60 +371,83 @@ export default function OrganizationApplicationsPage() {
 
   const filteredMatches = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return matches;
 
     return matches.filter((match) => {
       const application = match.application || {};
-      return [
-        application.referral_id,
-        match.referral_id,
-        application.full_name,
-        canViewContact ? application.phone : "",
-        canViewContact ? application.email : "",
-        application.credit_type,
-        labelFor(application.customer_type, ""),
-        labelFor(application.status, ""),
-        labelFor(application.credit_result_status, ""),
-        labelFor(match.source, ""),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(needle);
-    });
-  }, [matches, search, canViewContact]);
+      const matchesSearch =
+        !needle ||
+        [
+          application.referral_id,
+          match.referral_id,
+          application.full_name,
+          canViewContact ? application.phone : "",
+          canViewContact ? application.email : "",
+          application.credit_type,
+          labelFor(application.customer_type, ""),
+          labelFor(application.status, ""),
+          labelFor(application.credit_result_status, ""),
+          labelFor(match.source, ""),
+          labelFor(match.monetization_model, ""),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(needle);
 
-  const pagedMatches = filteredMatches.slice(0, rowLimit);
+      const matchesStatus =
+        statusFilter === "all" ? true : application.status === statusFilter;
+      const matchesResult =
+        resultFilter === "all" ? true : application.credit_result_status === resultFilter;
+
+      return matchesSearch && matchesStatus && matchesResult;
+    });
+  }, [matches, search, canViewContact, statusFilter, resultFilter]);
+
+  const pagedMatches = useMemo(() => {
+    if (rowLimit === "all") return filteredMatches;
+    return filteredMatches.slice(0, Number(rowLimit));
+  }, [filteredMatches, rowLimit]);
 
   const summary = useMemo(() => {
-    const assigned = matches.length;
-    const pending = matches.filter(
-      (item) => item.application?.credit_result_status === "pending"
-    ).length;
-
-    return { assigned, pending };
+    return {
+      assigned: matches.length,
+      pending: matches.filter((item) => item.application?.credit_result_status === "pending").length,
+      disbursed: matches.filter((item) => item.application?.credit_result_status === "disbursed").length,
+    };
   }, [matches]);
+
+  const statusOptions = useMemo(
+    () => Array.from(new Set(matches.map((item) => item.application?.status).filter(Boolean))),
+    [matches]
+  );
+
+  const resultOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(matches.map((item) => item.application?.credit_result_status).filter(Boolean))
+      ),
+    [matches]
+  );
+
+  const persistColumns = (keys) => {
+    setVisibleColumnKeys(keys);
+    window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(keys));
+  };
 
   const toggleColumn = (key) => {
     const nextKeys = activeVisibleKeys.includes(key)
       ? activeVisibleKeys.filter((item) => item !== key)
       : [...activeVisibleKeys, key];
-    const normalizedKeys = nextKeys.length ? nextKeys : columns.map((column) => column.key);
-    setVisibleColumnKeys(normalizedKeys);
-    window.localStorage.setItem(
-      "vabank_org_applications_columns",
-      JSON.stringify(normalizedKeys)
-    );
+    persistColumns(nextKeys.length ? nextKeys : columns.map((column) => column.key));
   };
 
   const exportRows = (format) => {
-    const headers = visibleColumns.map((column) => column.label);
+    const exportColumns = visibleColumns.filter((column) => column.key !== "action");
+    const headers = exportColumns.map((column) => column.label);
     const rows = filteredMatches.map((match) =>
-      visibleColumns.map((column) => column.exportValue(match))
+      exportColumns.map((column) => column.exportValue(match))
     );
-    const csv = [headers, ...rows]
-      .map((row) => row.map(escapeCsv).join(","))
-      .join("\n");
+    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
 
     if (format === "print") {
       window.print();
@@ -410,9 +455,11 @@ export default function OrganizationApplicationsPage() {
     }
 
     downloadTextFile(
-      format === "excel" ? "muracietler.xls" : "muracietler.csv",
+      format === "excel" ? "bank-muracietleri.xls" : "bank-muracietleri.csv",
       csv,
-      format === "excel" ? "application/vnd.ms-excel;charset=utf-8" : "text/csv;charset=utf-8"
+      format === "excel"
+        ? "application/vnd.ms-excel;charset=utf-8"
+        : "text/csv;charset=utf-8"
     );
   };
 
@@ -424,9 +471,8 @@ export default function OrganizationApplicationsPage() {
     <div>
       <PageHeader
         kicker="Müraciətlər"
-        title="Müraciətlərim"
-        subtitle="Təşkilata yönləndirilmiş müraciətlər RLS ilə qorunan match modeli üzərindən oxunur."
-        badge="Read-only MVP"
+        title="Bank müraciətləri"
+        subtitle="Bankınıza yönləndirilmiş müraciətlər və onların kredit nəticələri."
       />
 
       <div style={styles.summaryGrid}>
@@ -434,25 +480,52 @@ export default function OrganizationApplicationsPage() {
           <div style={styles.summaryLabel}>Təyin edilmiş müraciətlər</div>
           <div style={styles.summaryValue}>{loading ? "-" : summary.assigned}</div>
         </div>
-
         <div style={styles.summaryCard}>
           <div style={styles.summaryLabel}>Gözləyən nəticələr</div>
           <div style={styles.summaryValue}>{loading ? "-" : summary.pending}</div>
+        </div>
+        <div style={styles.summaryCard}>
+          <div style={styles.summaryLabel}>Kredit verilib</div>
+          <div style={styles.summaryValue}>{loading ? "-" : summary.disbursed}</div>
         </div>
       </div>
 
       <SectionPanel
         title="Müraciət siyahısı"
-        desc="Yalnız seçilmiş təşkilat və admin tərəfindən təyin edilmiş assigned match-lər göstərilir."
+        desc="Siyahıda yalnız bankınıza təyin edilmiş müraciətlər göstərilir."
       >
         <div style={styles.filterPanel}>
           <div style={styles.filters}>
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Axtarış"
+              placeholder="Ad, referral, telefon və ya kredit növü"
               style={styles.input}
             />
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              style={styles.select}
+            >
+              <option value="all">Bütün statuslar</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {labelFor(status)}
+                </option>
+              ))}
+            </select>
+            <select
+              value={resultFilter}
+              onChange={(event) => setResultFilter(event.target.value)}
+              style={styles.select}
+            >
+              <option value="all">Bütün nəticələr</option>
+              {resultOptions.map((status) => (
+                <option key={status} value={status}>
+                  {labelFor(status)}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -463,24 +536,19 @@ export default function OrganizationApplicationsPage() {
 
           <div style={styles.toolbarActions}>
             <label style={styles.showLabel}>Göstər</label>
-
             <select
               value={rowLimit}
-              onChange={(event) => setRowLimit(Number(event.target.value))}
+              onChange={(event) => setRowLimit(event.target.value)}
               style={styles.smallSelect}
             >
-              {[10, 25, 50, 100].map((count) => (
-                <option key={count} value={count}>
-                  {count}
-                </option>
-              ))}
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="all">Hamısı</option>
             </select>
 
-            <button
-              type="button"
-              style={styles.columnBtn}
-              onClick={() => setColumnPanelOpen(true)}
-            >
+            <button type="button" style={styles.columnBtn} onClick={() => setColumnPanelOpen(true)}>
               Sütun seç
             </button>
 
@@ -495,34 +563,13 @@ export default function OrganizationApplicationsPage() {
                 </button>
                 {exportOpen ? (
                   <div style={styles.exportMenu}>
-                    <button
-                      type="button"
-                      style={styles.exportMenuItem}
-                      onClick={() => {
-                        setExportOpen(false);
-                        exportRows("print");
-                      }}
-                    >
+                    <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("print")}>
                       Çap / PDF
                     </button>
-                    <button
-                      type="button"
-                      style={styles.exportMenuItem}
-                      onClick={() => {
-                        setExportOpen(false);
-                        exportRows("csv");
-                      }}
-                    >
+                    <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("csv")}>
                       CSV
                     </button>
-                    <button
-                      type="button"
-                      style={styles.exportMenuItem}
-                      onClick={() => {
-                        setExportOpen(false);
-                        exportRows("excel");
-                      }}
-                    >
+                    <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("excel")}>
                       Excel file
                     </button>
                   </div>
@@ -533,13 +580,11 @@ export default function OrganizationApplicationsPage() {
         </div>
 
         {loading ? <div style={styles.stateBox}>Müraciətlər yüklənir...</div> : null}
-
         {!loading && errorMessage ? <div style={styles.errorBox}>{errorMessage}</div> : null}
-
         {!loading && !errorMessage && !matches.length ? (
           <EmptyState
-            title="Təşkilat üçün müraciət tapılmadı"
-            desc="RLS qaydalarına görə yalnız bu təşkilata aid assigned match-lər göstərilir."
+            title="Bank üçün müraciət tapılmadı"
+            desc="Bankınıza müraciət təyin edildikdən sonra siyahı burada görünəcək."
           />
         ) : null}
 
@@ -547,41 +592,45 @@ export default function OrganizationApplicationsPage() {
           <div ref={tableSectionRef} style={styles.tableSection}>
             <div style={{ ...styles.tableShell, width: `${tableShellWidth}px` }}>
               <div style={styles.tableScroll}>
-              <table
-                style={{
-                  ...styles.table,
-                  width: `${tableWidth}px`,
-                  minWidth: `${tableWidth}px`,
-                }}
-              >
-                <colgroup>
-                  {visibleColumns.map((column) => (
-                    <col key={column.key} style={{ width: `${column.width}px` }} />
-                  ))}
-                </colgroup>
-                <thead>
-                  <tr>
+                <table
+                  style={{
+                    ...styles.table,
+                    width: `${tableWidth}px`,
+                    minWidth: `${tableWidth}px`,
+                  }}
+                >
+                  <colgroup>
                     {visibleColumns.map((column) => (
-                      <th key={column.key} style={styles.th}>
-                        {column.label}
-                      </th>
+                      <col key={column.key} style={{ width: `${column.width}px` }} />
                     ))}
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {pagedMatches.map((match) => (
-                    <tr key={match.id}>
+                  </colgroup>
+                  <thead>
+                    <tr>
                       {visibleColumns.map((column) => (
-                        <td key={column.key} style={styles.td}>
-                          {column.render(match)}
-                        </td>
+                        <th key={column.key} style={styles.th}>
+                          {column.label}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+
+                  <tbody>
+                    {pagedMatches.map((match) => (
+                      <tr key={match.id}>
+                        {visibleColumns.map((column) => (
+                          <td key={column.key} style={styles.td}>
+                            {column.render(match)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+
+              {!pagedMatches.length ? (
+                <div style={styles.emptyBox}>Filterlərə uyğun müraciət tapılmadı.</div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -593,24 +642,17 @@ export default function OrganizationApplicationsPage() {
             <div style={styles.modalHeader}>
               <div>
                 <h2 style={styles.modalTitle}>Sütun seçimi</h2>
-                <p style={styles.modalSubtitle}>
-                  Əsas cədvəldə görünəcək sütunları seçin.
-                </p>
+                <p style={styles.modalSubtitle}>Cədvəldə görünəcək sütunları seçin.</p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setColumnPanelOpen(false)}
-                style={styles.modalClose}
-              >
-                ×
+              <button type="button" onClick={() => setColumnPanelOpen(false)} style={styles.modalClose}>
+                x
               </button>
             </div>
 
             <div style={styles.columnsGrid}>
               {columns.map((column) => {
                 const isVisible = activeVisibleKeys.includes(column.key);
-
                 return (
                   <div
                     key={column.key}
@@ -636,24 +678,13 @@ export default function OrganizationApplicationsPage() {
             <div style={styles.modalFooter}>
               <button
                 type="button"
-                onClick={() => {
-                  const keys = columns.map((column) => column.key);
-                  setVisibleColumnKeys(keys);
-                  window.localStorage.setItem(
-                    "vabank_org_applications_columns",
-                    JSON.stringify(keys)
-                  );
-                }}
+                onClick={() => persistColumns(columns.map((column) => column.key))}
                 style={styles.secondaryBtn}
               >
                 Hamısını seç
               </button>
 
-              <button
-                type="button"
-                onClick={() => setColumnPanelOpen(false)}
-                style={styles.primaryBtn}
-              >
+              <button type="button" onClick={() => setColumnPanelOpen(false)} style={styles.primaryBtn}>
                 Təsdiq et
               </button>
             </div>
@@ -674,7 +705,7 @@ const styles = {
   summaryCard: {
     background: "#ffffff",
     border: "1px solid #e2e8f0",
-    borderRadius: "18px",
+    borderRadius: "14px",
     padding: "18px",
     boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
   },
@@ -692,7 +723,7 @@ const styles = {
   filterPanel: {
     background: "#ffffff",
     border: "1px solid #dbe4ee",
-    borderRadius: "22px",
+    borderRadius: "16px",
     padding: "18px",
     marginBottom: "14px",
   },
@@ -703,11 +734,22 @@ const styles = {
   },
   input: {
     minHeight: "46px",
-    borderRadius: "14px",
+    borderRadius: "12px",
     border: "1px solid #dbe4ee",
     padding: "0 14px",
     fontSize: "14px",
     color: "#0f172a",
+    outline: "none",
+    fontFamily: "inherit",
+  },
+  select: {
+    minHeight: "46px",
+    borderRadius: "12px",
+    border: "1px solid #dbe4ee",
+    padding: "0 14px",
+    fontSize: "14px",
+    color: "#0f172a",
+    background: "#ffffff",
     outline: "none",
     fontFamily: "inherit",
   },
@@ -719,7 +761,7 @@ const styles = {
     flexWrap: "wrap",
     background: "#ffffff",
     border: "1px solid #dbe4ee",
-    borderRadius: "18px",
+    borderRadius: "14px",
     padding: "12px 14px",
     marginBottom: "14px",
   },
@@ -802,7 +844,7 @@ const styles = {
   },
   stateBox: {
     minHeight: "88px",
-    borderRadius: "16px",
+    borderRadius: "14px",
     border: "1px solid #e2e8f0",
     background: "#f8fafc",
     padding: "18px",
@@ -814,7 +856,7 @@ const styles = {
   },
   errorBox: {
     minHeight: "88px",
-    borderRadius: "16px",
+    borderRadius: "14px",
     border: "1px solid #fecaca",
     background: "#fff7f7",
     padding: "18px",
@@ -835,7 +877,7 @@ const styles = {
     width: "100%",
     overflowX: "auto",
     border: "1px solid #e2e8f0",
-    borderRadius: "20px",
+    borderRadius: "16px",
     background: "#ffffff",
   },
   table: {
@@ -885,6 +927,19 @@ const styles = {
     textDecoration: "none",
     fontWeight: 800,
   },
+  actionBtn: {
+    display: "inline-flex",
+    minHeight: "36px",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "10px",
+    background: "#0f172a",
+    color: "#ffffff",
+    padding: "0 14px",
+    fontSize: "13px",
+    fontWeight: 700,
+    textDecoration: "none",
+  },
   badge: {
     display: "inline-flex",
     minHeight: "30px",
@@ -915,6 +970,11 @@ const styles = {
     color: "#991b1b",
     border: "1px solid #fecaca",
   },
+  emptyBox: {
+    padding: "20px",
+    fontSize: "14px",
+    color: "#64748b",
+  },
   modalBackdrop: {
     position: "fixed",
     inset: 0,
@@ -929,7 +989,7 @@ const styles = {
     width: "min(760px, 100%)",
     maxHeight: "90vh",
     background: "#ffffff",
-    borderRadius: "24px",
+    borderRadius: "18px",
     border: "1px solid #dbe4ee",
     boxShadow: "0 30px 80px rgba(15, 23, 42, 0.25)",
     overflow: "hidden",
@@ -961,8 +1021,7 @@ const styles = {
     borderRadius: "12px",
     border: "1px solid #dbe4ee",
     background: "#ffffff",
-    fontSize: "28px",
-    lineHeight: 1,
+    fontSize: "16px",
     cursor: "pointer",
     color: "#64748b",
   },
@@ -978,7 +1037,7 @@ const styles = {
   columnOptionRow: {
     minHeight: "44px",
     border: "1px solid #e2e8f0",
-    borderRadius: "14px",
+    borderRadius: "12px",
     padding: "0 10px",
     display: "flex",
     alignItems: "center",
