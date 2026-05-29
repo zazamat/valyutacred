@@ -58,11 +58,88 @@ function isCurrentMonth(value) {
   return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
 }
 
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatMonthLabel(date) {
+  return new Intl.DateTimeFormat("az-AZ", {
+    month: "short",
+  }).format(date);
+}
+
+function sumTransactions(transactions, predicate) {
+  return transactions
+    .filter(predicate)
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
+function buildExpenseTrend(transactions) {
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+    return {
+      key: monthKey(date),
+      label: formatMonthLabel(date),
+      value: 0,
+      color: "#16a34a",
+    };
+  });
+  const lookup = new Map(months.map((item) => [item.key, item]));
+
+  transactions.forEach((item) => {
+    if (item.direction !== "debit" || item.status !== "completed") return;
+    const date = item.created_at ? new Date(item.created_at) : null;
+    if (!date || Number.isNaN(date.getTime())) return;
+
+    const bucket = lookup.get(monthKey(date));
+    if (bucket) bucket.value += Number(item.amount || 0);
+  });
+
+  return months;
+}
+
 function getTone(value) {
   if (value === "credit" || value === "completed") return styles.badgeSuccess;
   if (value === "debit" || value === "pending") return styles.badgeWarning;
   if (value === "cancelled" || value === "refunded") return styles.badgeDanger;
   return styles.badgeNeutral;
+}
+
+function MiniBarChart({ items, emptyTitle, emptyDesc, money = false }) {
+  const max = Math.max(...items.map((item) => item.value), 0);
+
+  if (!max) {
+    return (
+      <div style={styles.chartEmpty}>
+        <strong>{emptyTitle}</strong>
+        <span>{emptyDesc}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.barChart}>
+      {items.map((item) => {
+        const height = Math.max(8, Math.round((item.value / max) * 100));
+        const titleValue = money ? formatMoney(item.value) : item.value;
+        return (
+          <div key={item.key || item.label} style={styles.barItem} title={`${item.label}: ${titleValue}`}>
+            <div style={styles.barTrack}>
+              <div
+                style={{
+                  ...styles.barFill,
+                  height: `${height}%`,
+                  background: item.color || "#16a34a",
+                }}
+              />
+            </div>
+            <span>{item.shortLabel || item.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function OrganizationBalancePage() {
@@ -90,7 +167,7 @@ export default function OrganizationBalancePage() {
         .select(TRANSACTION_SELECT)
         .eq("organization_id", organization.id)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (!active) return;
 
@@ -133,6 +210,57 @@ export default function OrganizationBalancePage() {
     };
   }, [transactions, organization]);
 
+  const expenseDistribution = useMemo(
+    () => [
+      {
+        key: "lead_fee",
+        label: labelFor("lead_fee"),
+        shortLabel: "Lead",
+        value: sumTransactions(
+          transactions,
+          (item) => item.transaction_type === "lead_fee" && item.direction === "debit" && item.status === "completed"
+        ),
+        color: "#16a34a",
+      },
+      {
+        key: "success_fee",
+        label: labelFor("success_fee"),
+        shortLabel: "Uğur",
+        value: sumTransactions(
+          transactions,
+          (item) => item.transaction_type === "success_fee" && item.direction === "debit" && item.status === "completed"
+        ),
+        color: "#2563eb",
+      },
+      {
+        key: "manual_adjustment",
+        label: labelFor("manual_adjustment"),
+        shortLabel: "Düzəliş",
+        value: sumTransactions(
+          transactions,
+          (item) =>
+            item.transaction_type === "manual_adjustment" &&
+            item.direction === "debit" &&
+            item.status === "completed"
+        ),
+        color: "#64748b",
+      },
+      {
+        key: "refund",
+        label: labelFor("refund"),
+        shortLabel: "Geri",
+        value: sumTransactions(
+          transactions,
+          (item) => item.transaction_type === "refund" && item.status === "completed"
+        ),
+        color: "#0f766e",
+      },
+    ],
+    [transactions]
+  );
+  const expenseTrend = useMemo(() => buildExpenseTrend(transactions), [transactions]);
+  const expenseTotal = expenseDistribution.reduce((sum, item) => sum + item.value, 0);
+
   if (!hasPermission("can_view_balance")) {
     return <PermissionDenied />;
   }
@@ -165,6 +293,38 @@ export default function OrganizationBalancePage() {
             desc="Gözləyən məxaric əməliyyatları üzrə bloklanmış məbləğ."
           />
         </div>
+      </section>
+
+      <section style={styles.visualGrid}>
+        <SectionPanel
+          title="Xərclərin bölgüsü"
+          desc="Tamamlanmış əməliyyatlar tip üzrə qruplaşdırılır."
+        >
+          <div style={styles.chartHeader}>
+            <div>
+              <span>Ümumi aktivlik</span>
+              <strong>{formatMoney(expenseTotal)}</strong>
+            </div>
+          </div>
+          <MiniBarChart
+            items={expenseDistribution}
+            money
+            emptyTitle="Bu dövr üzrə xərc əməliyyatı yoxdur"
+            emptyDesc="Əməliyyatlar yarandıqca qrafiklər avtomatik dolacaq."
+          />
+        </SectionPanel>
+
+        <SectionPanel
+          title="Son 6 ay xərc trendi"
+          desc="Tamamlanmış məxaric əməliyyatlarının aylıq dinamikası."
+        >
+          <MiniBarChart
+            items={expenseTrend}
+            money
+            emptyTitle="Bu dövr üzrə xərc əməliyyatı yoxdur"
+            emptyDesc="Əməliyyatlar yarandıqca qrafiklər avtomatik dolacaq."
+          />
+        </SectionPanel>
       </section>
 
       <SectionPanel
@@ -234,6 +394,69 @@ export default function OrganizationBalancePage() {
 }
 
 const styles = {
+  visualGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+    gap: "18px",
+    marginBottom: "18px",
+  },
+  chartHeader: {
+    minHeight: "68px",
+    borderRadius: "8px",
+    background: "linear-gradient(135deg, #ecfdf5 0%, #eff6ff 100%)",
+    border: "1px solid #dbeafe",
+    padding: "14px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    color: "#0f172a",
+    marginBottom: "14px",
+  },
+  barChart: {
+    minHeight: "184px",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(36px, 1fr))",
+    alignItems: "end",
+    gap: "10px",
+    paddingTop: "8px",
+  },
+  barItem: {
+    minWidth: 0,
+    display: "grid",
+    gridTemplateRows: "132px 24px",
+    alignItems: "end",
+    gap: "8px",
+    color: "#64748b",
+    fontSize: "11px",
+    textAlign: "center",
+  },
+  barTrack: {
+    height: "132px",
+    borderRadius: "8px",
+    background: "#f1f5f9",
+    display: "flex",
+    alignItems: "flex-end",
+    overflow: "hidden",
+  },
+  barFill: {
+    width: "100%",
+    borderRadius: "8px 8px 0 0",
+    transition: "height 160ms ease",
+  },
+  chartEmpty: {
+    minHeight: "184px",
+    borderRadius: "8px",
+    border: "1px dashed #cbd5e1",
+    background: "#f8fafc",
+    color: "#64748b",
+    display: "grid",
+    placeItems: "center",
+    alignContent: "center",
+    gap: "6px",
+    textAlign: "center",
+    padding: "20px",
+    fontSize: "13px",
+  },
   stateBox: {
     minHeight: "88px",
     borderRadius: "14px",

@@ -9,7 +9,6 @@ import {
   EmptyState,
   PageHeader,
   SectionPanel,
-  StatCard,
   pageStyles,
 } from "./_components/OrganizationPlaceholders";
 
@@ -82,6 +81,21 @@ function isCurrentMonth(value) {
   return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
 }
 
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dateKey(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDayLabel(date) {
+  return new Intl.DateTimeFormat("az-AZ", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(date);
+}
+
 function getStatusTone(status) {
   if (status === "approved" || status === "disbursed" || status === "sent") {
     return styles.badgeSuccess;
@@ -93,6 +107,85 @@ function getStatusTone(status) {
     return styles.badgeWarning;
   }
   return styles.badgeInfo;
+}
+
+function buildDonutGradient(items) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  if (!total) return "#f1f5f9";
+
+  let cursor = 0;
+  const stops = items
+    .filter((item) => item.value > 0)
+    .map((item) => {
+      const start = cursor;
+      const end = cursor + (item.value / total) * 100;
+      cursor = end;
+      return `${item.color} ${start}% ${end}%`;
+    });
+
+  return `conic-gradient(${stops.join(", ")})`;
+}
+
+function buildApplicationTrend(matches) {
+  const today = startOfDay(new Date());
+  const days = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (29 - index));
+    return { key: dateKey(date), label: formatDayLabel(date), value: 0 };
+  });
+  const lookup = new Map(days.map((item) => [item.key, item]));
+
+  matches.forEach((match) => {
+    const rawDate = match.application?.created_at || match.assigned_at || match.matched_at;
+    const date = rawDate ? startOfDay(new Date(rawDate)) : null;
+    if (!date || Number.isNaN(date.getTime())) return;
+
+    const item = lookup.get(dateKey(date));
+    if (item) item.value += 1;
+  });
+
+  return days;
+}
+
+function sumTransactions(transactions, predicate) {
+  return transactions
+    .filter(predicate)
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
+function MiniBarChart({ items, emptyTitle, emptyDesc }) {
+  const max = Math.max(...items.map((item) => item.value), 0);
+
+  if (!max) {
+    return (
+      <div style={styles.chartEmpty}>
+        <strong>{emptyTitle}</strong>
+        <span>{emptyDesc}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.barChart}>
+      {items.map((item) => {
+        const height = Math.max(8, Math.round((item.value / max) * 100));
+        return (
+          <div key={item.key || item.label} style={styles.barItem} title={`${item.label}: ${item.value}`}>
+            <div style={styles.barTrack}>
+              <div
+                style={{
+                  ...styles.barFill,
+                  height: `${height}%`,
+                  background: item.color || "#16a34a",
+                }}
+              />
+            </div>
+            <span>{item.shortLabel || item.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function OrganizationDashboardPage() {
@@ -201,20 +294,29 @@ export default function OrganizationDashboardPage() {
   }, [matches, transactions, organization]);
 
   const stats = [
-    { title: "Yeni müraciətlər", value: loading ? "-" : dashboard.newApplications },
-    { title: "Baxılır", value: loading ? "-" : dashboard.inReview },
-    { title: "Təsdiqlənib", value: loading ? "-" : dashboard.approved },
-    { title: "Rədd edilib", value: loading ? "-" : dashboard.rejected },
-    { title: "Kredit verilib", value: loading ? "-" : dashboard.disbursed },
     {
-      title: "Bu ay xərclənib",
-      value: loading ? "-" : formatMoney(dashboard.spentThisMonth),
-      desc: "Tamamlanmış məxaric balans əməliyyatlarına əsasən hesablanır.",
+      title: "Yeni müraciətlər",
+      value: loading ? "-" : dashboard.newApplications,
+      desc: "Yeni daxil olan müraciətlər",
+      color: "#16a34a",
+    },
+    {
+      title: "Baxılır",
+      value: loading ? "-" : dashboard.inReview,
+      desc: "Hazırda bank baxışında",
+      color: "#f59e0b",
     },
     {
       title: "Cari balans",
       value: canViewBalance ? formatMoney(dashboard.balance) : "-",
-      desc: canViewBalance ? "Təşkilat balansı." : "Balans üçün icazə tələb olunur.",
+      desc: canViewBalance ? "Təşkilat balansı" : "Balans üçün icazə tələb olunur",
+      color: "#2563eb",
+    },
+    {
+      title: "Bu ay xərclənib",
+      value: loading ? "-" : formatMoney(dashboard.spentThisMonth),
+      desc: "Tamamlanmış məxaric balans əməliyyatlarına əsasən hesablanır.",
+      color: "#0f766e",
     },
   ];
 
@@ -225,6 +327,57 @@ export default function OrganizationDashboardPage() {
   const pendingDebitCount = transactions.filter(
     (item) => item.direction === "debit" && item.status === "pending"
   ).length;
+  const statusChart = [
+    { key: "new", label: "Yeni", value: dashboard.newApplications, color: "#16a34a" },
+    { key: "review", label: "Baxılır", value: dashboard.inReview, color: "#f59e0b" },
+    {
+      key: "approved",
+      label: "Təsdiqlənib",
+      value: dashboard.approved + dashboard.disbursed,
+      color: "#2563eb",
+    },
+    { key: "rejected", label: "Rədd edilib", value: dashboard.rejected, color: "#dc2626" },
+  ];
+  const statusTotal = statusChart.reduce((sum, item) => sum + item.value, 0);
+  const trend = buildApplicationTrend(matches);
+  const trendPreview = trend.map((item, index) => ({
+    ...item,
+    shortLabel: index % 5 === 0 || index === trend.length - 1 ? item.label : "",
+    color: item.value ? "#16a34a" : "#cbd5e1",
+  }));
+  const expenseChart = [
+    {
+      key: "lead_fee",
+      label: "Lead haqqı",
+      value: sumTransactions(
+        transactions,
+        (item) => item.transaction_type === "lead_fee" && item.direction === "debit" && item.status === "completed"
+      ),
+      color: "#16a34a",
+    },
+    {
+      key: "success_fee",
+      label: "Uğur komissiyası",
+      value: sumTransactions(
+        transactions,
+        (item) => item.transaction_type === "success_fee" && item.direction === "debit" && item.status === "completed"
+      ),
+      color: "#2563eb",
+    },
+    {
+      key: "manual_adjustment",
+      label: "Manual düzəliş",
+      value: sumTransactions(
+        transactions,
+        (item) =>
+          item.transaction_type === "manual_adjustment" &&
+          item.direction === "debit" &&
+          item.status === "completed"
+      ),
+      color: "#64748b",
+    },
+  ];
+  const expenseTotal = expenseChart.reduce((sum, item) => sum + item.value, 0);
 
   return (
     <div>
@@ -237,11 +390,79 @@ export default function OrganizationDashboardPage() {
       {errorMessage ? <div style={styles.errorBox}>{errorMessage}</div> : null}
 
       <section style={pageStyles.section}>
-        <div style={pageStyles.cardsGrid}>
+        <div style={styles.kpiGrid}>
           {stats.map((item) => (
-            <StatCard key={item.title} {...item} />
+            <div key={item.title} style={styles.visualKpi}>
+              <span style={{ ...styles.kpiAccent, background: item.color }} />
+              <div>
+                <div style={styles.kpiTitle}>{item.title}</div>
+                <div style={styles.kpiValue}>{item.value}</div>
+                {item.desc ? <div style={styles.kpiDesc}>{item.desc}</div> : null}
+              </div>
+            </div>
           ))}
         </div>
+      </section>
+
+      <section style={styles.visualGrid}>
+        <SectionPanel
+          title="Müraciət statusları"
+          desc="Yeni, baxışda olan və nəticələnmiş müraciətlərin bölgüsü."
+        >
+          <div style={styles.donutWrap}>
+            <div
+              style={{
+                ...styles.donut,
+                background: buildDonutGradient(statusChart),
+              }}
+            >
+              <div style={styles.donutInner}>
+                <strong>{statusTotal}</strong>
+                <span>müraciət</span>
+              </div>
+            </div>
+            <div style={styles.legendList}>
+              {statusChart.map((item) => (
+                <div key={item.key} style={styles.legendRow}>
+                  <span style={{ ...styles.legendDot, background: item.color }} />
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        </SectionPanel>
+
+        <SectionPanel
+          title="Son 30 gün trendi"
+          desc="Bankınıza yönləndirilən müraciətlərin gündəlik dinamikası."
+        >
+          <MiniBarChart
+            items={trendPreview}
+            emptyTitle="Son 30 gündə müraciət yoxdur"
+            emptyDesc="Yeni müraciətlər gəldikcə trend avtomatik dolacaq."
+          />
+        </SectionPanel>
+
+        <SectionPanel
+          title="Komissiya xülasəsi"
+          desc="Tamamlanmış məxaric əməliyyatlarının tip üzrə bölgüsü."
+        >
+          <div style={styles.expenseSummary}>
+            <div style={styles.expenseTotal}>
+              <span>Ümumi xərc</span>
+              <strong>{formatMoney(expenseTotal)}</strong>
+            </div>
+            <MiniBarChart
+              items={expenseChart.map((item) => ({
+                ...item,
+                shortLabel: item.label.split(" ")[0],
+              }))}
+              emptyTitle="Xərc əməliyyatı yoxdur"
+              emptyDesc="Lead haqqı və uğur komissiyası yarandıqca qrafik dolacaq."
+            />
+          </div>
+        </SectionPanel>
       </section>
 
       <section style={pageStyles.bottomGrid}>
@@ -312,6 +533,160 @@ export default function OrganizationDashboardPage() {
 }
 
 const styles = {
+  kpiGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "14px",
+  },
+  visualKpi: {
+    minHeight: "132px",
+    borderRadius: "8px",
+    border: "1px solid #dbe7df",
+    background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 58%, #ecfdf5 100%)",
+    padding: "18px",
+    position: "relative",
+    overflow: "hidden",
+    display: "flex",
+    alignItems: "flex-start",
+  },
+  kpiAccent: {
+    position: "absolute",
+    inset: "0 auto 0 0",
+    width: "5px",
+  },
+  kpiTitle: {
+    color: "#64748b",
+    fontSize: "13px",
+    fontWeight: 750,
+  },
+  kpiValue: {
+    marginTop: "8px",
+    color: "#0f172a",
+    fontSize: "28px",
+    lineHeight: 1.1,
+    fontWeight: 900,
+  },
+  kpiDesc: {
+    marginTop: "8px",
+    color: "#64748b",
+    fontSize: "13px",
+    lineHeight: 1.45,
+  },
+  visualGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gap: "18px",
+    marginBottom: "18px",
+  },
+  donutWrap: {
+    display: "grid",
+    gridTemplateColumns: "132px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: "18px",
+  },
+  donut: {
+    width: "132px",
+    height: "132px",
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
+    boxShadow: "inset 0 0 0 1px rgba(15, 23, 42, 0.06)",
+  },
+  donutInner: {
+    width: "78px",
+    height: "78px",
+    borderRadius: "50%",
+    background: "#ffffff",
+    display: "grid",
+    placeItems: "center",
+    alignContent: "center",
+    boxShadow: "0 8px 22px rgba(15, 23, 42, 0.08)",
+    color: "#0f172a",
+    fontSize: "12px",
+  },
+  legendList: {
+    display: "grid",
+    gap: "9px",
+  },
+  legendRow: {
+    minHeight: "34px",
+    borderRadius: "8px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    display: "grid",
+    gridTemplateColumns: "10px 1fr auto",
+    alignItems: "center",
+    gap: "9px",
+    padding: "0 10px",
+    color: "#334155",
+    fontSize: "13px",
+  },
+  legendDot: {
+    width: "10px",
+    height: "10px",
+    borderRadius: "50%",
+  },
+  barChart: {
+    minHeight: "176px",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(8px, 1fr))",
+    alignItems: "end",
+    gap: "5px",
+    paddingTop: "8px",
+  },
+  barItem: {
+    minWidth: 0,
+    display: "grid",
+    gridTemplateRows: "132px 22px",
+    alignItems: "end",
+    gap: "8px",
+    color: "#64748b",
+    fontSize: "10px",
+    textAlign: "center",
+  },
+  barTrack: {
+    height: "132px",
+    borderRadius: "8px",
+    background: "#f1f5f9",
+    display: "flex",
+    alignItems: "flex-end",
+    overflow: "hidden",
+  },
+  barFill: {
+    width: "100%",
+    borderRadius: "8px 8px 0 0",
+    transition: "height 160ms ease",
+  },
+  chartEmpty: {
+    minHeight: "176px",
+    borderRadius: "8px",
+    border: "1px dashed #cbd5e1",
+    background: "#f8fafc",
+    color: "#64748b",
+    display: "grid",
+    placeItems: "center",
+    alignContent: "center",
+    gap: "6px",
+    textAlign: "center",
+    padding: "20px",
+    fontSize: "13px",
+  },
+  expenseSummary: {
+    display: "grid",
+    gap: "14px",
+  },
+  expenseTotal: {
+    minHeight: "62px",
+    borderRadius: "8px",
+    background: "#ecfdf5",
+    border: "1px solid #bbf7d0",
+    padding: "12px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    color: "#166534",
+  },
   errorBox: {
     minHeight: "70px",
     borderRadius: "14px",
