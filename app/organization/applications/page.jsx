@@ -11,10 +11,23 @@ import {
 import {
   EmptyState,
   PageHeader,
-  SectionPanel,
 } from "../_components/OrganizationPlaceholders";
 
 const COLUMN_STORAGE_KEY = "vabank_org_applications_columns";
+const COLUMN_DEFAULTS_VERSION_KEY = "vabank_org_applications_columns_version";
+const CURRENT_COLUMN_DEFAULTS_VERSION = "2";
+
+const DEFAULT_VISIBLE_COLUMN_KEYS = [
+  "referral",
+  "customer",
+  "contact",
+  "credit_type",
+  "amount",
+  "status",
+  "result",
+  "date",
+  "action",
+];
 
 const MATCH_SELECT = `
   id,
@@ -103,6 +116,28 @@ function escapeCsv(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function getStoredColumns() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const savedVersion = window.localStorage.getItem(COLUMN_DEFAULTS_VERSION_KEY);
+    const saved = JSON.parse(window.localStorage.getItem(COLUMN_STORAGE_KEY) || "null");
+
+    if (savedVersion !== CURRENT_COLUMN_DEFAULTS_VERSION) return null;
+    return Array.isArray(saved) && saved.length ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function OrganizationApplicationsPage() {
   const tableSectionRef = useRef(null);
   const { hasPermission } = useOrganizationPermissions();
@@ -114,21 +149,16 @@ export default function OrganizationApplicationsPage() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [pageMessage, setPageMessage] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [resultFilter, setResultFilter] = useState("all");
   const [rowLimit, setRowLimit] = useState("25");
   const [exportOpen, setExportOpen] = useState(false);
   const [columnPanelOpen, setColumnPanelOpen] = useState(false);
+  const [draggedColumnKey, setDraggedColumnKey] = useState(null);
   const [tableAvailableWidth, setTableAvailableWidth] = useState(0);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return JSON.parse(window.localStorage.getItem(COLUMN_STORAGE_KEY) || "null");
-    } catch {
-      return null;
-    }
-  });
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => getStoredColumns());
 
   useEffect(() => {
     const section = tableSectionRef.current;
@@ -257,6 +287,29 @@ export default function OrganizationApplicationsPage() {
         exportValue: (match) => labelFor(match.application?.customer_type, ""),
       },
       {
+        key: "match_id",
+        label: "Match ID",
+        width: 120,
+        render: (match) => `#${match.id}`,
+        exportValue: (match) => match.id,
+      },
+      {
+        key: "phone",
+        label: "Telefon",
+        width: 150,
+        hidden: !canViewContact,
+        render: (match) => match.application?.phone || "-",
+        exportValue: (match) => match.application?.phone || "",
+      },
+      {
+        key: "email",
+        label: "Email",
+        width: 220,
+        hidden: !canViewContact,
+        render: (match) => match.application?.email || "-",
+        exportValue: (match) => match.application?.email || "",
+      },
+      {
         key: "credit_type",
         label: "Kredit",
         width: 165,
@@ -301,7 +354,7 @@ export default function OrganizationApplicationsPage() {
       },
       {
         key: "model",
-        label: "Ödəniş modeli",
+        label: "Monetizasiya modeli",
         width: 190,
         hidden: !canViewMonetization,
         render: (match) => (
@@ -311,6 +364,13 @@ export default function OrganizationApplicationsPage() {
           </div>
         ),
         exportValue: (match) => labelFor(match.monetization_model, ""),
+      },
+      {
+        key: "distribution",
+        label: "Paylaşım tipi",
+        width: 170,
+        render: (match) => labelFor(match.application?.distribution_type),
+        exportValue: (match) => labelFor(match.application?.distribution_type, ""),
       },
       {
         key: "source",
@@ -336,8 +396,9 @@ export default function OrganizationApplicationsPage() {
               Bax
             </Link>
           ) : (
-            "-"
+            <span style={styles.mutedText}>İcazə yoxdur</span>
           ),
+        exportable: false,
         exportValue: () => "",
       },
     ];
@@ -349,12 +410,15 @@ export default function OrganizationApplicationsPage() {
     const availableKeys = columns.map((column) => column.key);
     const nextKeys = Array.isArray(visibleColumnKeys)
       ? visibleColumnKeys.filter((key) => availableKeys.includes(key))
-      : availableKeys;
+      : DEFAULT_VISIBLE_COLUMN_KEYS.filter((key) => availableKeys.includes(key));
     return nextKeys.length ? nextKeys : availableKeys;
   }, [columns, visibleColumnKeys]);
 
   const visibleColumns = useMemo(
-    () => columns.filter((column) => activeVisibleKeys.includes(column.key)),
+    () =>
+      activeVisibleKeys
+        .map((key) => columns.find((column) => column.key === key))
+        .filter(Boolean),
     [columns, activeVisibleKeys]
   );
 
@@ -368,6 +432,32 @@ export default function OrganizationApplicationsPage() {
     if (!tableAvailableWidth) return visualTableWidth;
     return Math.min(visualTableWidth, tableAvailableWidth);
   }, [tableAvailableWidth, tableWidth]);
+
+  const tableStyle = useMemo(
+    () => ({
+      ...styles.table,
+      width: `${tableWidth}px`,
+      minWidth: `${tableWidth}px`,
+    }),
+    [tableWidth]
+  );
+
+  const tableShellStyle = useMemo(
+    () => ({
+      ...styles.tableShell,
+      width: `${tableShellWidth}px`,
+    }),
+    [tableShellWidth]
+  );
+
+  const orderedColumnsForPanel = useMemo(() => {
+    const visibleOrdered = activeVisibleKeys
+      .map((key) => columns.find((column) => column.key === key))
+      .filter(Boolean);
+    const hiddenColumns = columns.filter((column) => !activeVisibleKeys.includes(column.key));
+
+    return [...visibleOrdered, ...hiddenColumns];
+  }, [activeVisibleKeys, columns]);
 
   const filteredMatches = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -430,37 +520,124 @@ export default function OrganizationApplicationsPage() {
   );
 
   const persistColumns = (keys) => {
-    setVisibleColumnKeys(keys);
-    window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(keys));
+    const availableKeys = columns.map((column) => column.key);
+    const cleanKeys = Array.from(new Set(keys.filter((key) => availableKeys.includes(key))));
+    const nextKeys = cleanKeys.length ? cleanKeys : ["action"];
+
+    setVisibleColumnKeys(nextKeys);
+
+    try {
+      window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(nextKeys));
+      window.localStorage.setItem(COLUMN_DEFAULTS_VERSION_KEY, CURRENT_COLUMN_DEFAULTS_VERSION);
+    } catch {}
   };
 
   const toggleColumn = (key) => {
-    const nextKeys = activeVisibleKeys.includes(key)
-      ? activeVisibleKeys.filter((item) => item !== key)
-      : [...activeVisibleKeys, key];
-    persistColumns(nextKeys.length ? nextKeys : columns.map((column) => column.key));
+    if (activeVisibleKeys.includes(key)) {
+      if (activeVisibleKeys.length === 1) return;
+      persistColumns(activeVisibleKeys.filter((item) => item !== key));
+      return;
+    }
+
+    persistColumns([...activeVisibleKeys, key]);
   };
 
+  const resetColumns = () => {
+    const availableKeys = columns.map((column) => column.key);
+    persistColumns(DEFAULT_VISIBLE_COLUMN_KEYS.filter((key) => availableKeys.includes(key)));
+  };
+
+  const selectAllColumns = () => {
+    persistColumns(columns.map((column) => column.key));
+  };
+
+  const moveColumn = (columnKey, direction) => {
+    const currentIndex = activeVisibleKeys.indexOf(columnKey);
+    if (currentIndex < 0) return;
+
+    const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (nextIndex < 0 || nextIndex >= activeVisibleKeys.length) return;
+
+    const nextKeys = [...activeVisibleKeys];
+    const [removed] = nextKeys.splice(currentIndex, 1);
+    nextKeys.splice(nextIndex, 0, removed);
+    persistColumns(nextKeys);
+  };
+
+  const moveColumnByDrag = (targetColumnKey) => {
+    if (!draggedColumnKey || draggedColumnKey === targetColumnKey) return;
+    if (!activeVisibleKeys.includes(draggedColumnKey)) return;
+    if (!activeVisibleKeys.includes(targetColumnKey)) return;
+
+    const nextKeys = [...activeVisibleKeys];
+    const fromIndex = nextKeys.indexOf(draggedColumnKey);
+    const toIndex = nextKeys.indexOf(targetColumnKey);
+    const [removed] = nextKeys.splice(fromIndex, 1);
+    nextKeys.splice(toIndex, 0, removed);
+    persistColumns(nextKeys);
+  };
+
+  const exportColumns = visibleColumns.filter((column) => column.exportable !== false);
+
+  const getExportRows = () =>
+    filteredMatches.map((match) => exportColumns.map((column) => column.exportValue(match)));
+
   const exportRows = (format) => {
-    const exportColumns = visibleColumns.filter((column) => column.key !== "action");
     const headers = exportColumns.map((column) => column.label);
-    const rows = filteredMatches.map((match) =>
-      exportColumns.map((column) => column.exportValue(match))
-    );
+    const rows = getExportRows();
     const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
 
     if (format === "print") {
+      setExportOpen(false);
       window.print();
       return;
     }
 
+    setExportOpen(false);
     downloadTextFile(
       format === "excel" ? "bank-muracietleri.xls" : "bank-muracietleri.csv",
-      csv,
+      format === "excel"
+        ? `
+          <html>
+            <head><meta charset="UTF-8" /></head>
+            <body>
+              <table border="1">
+                <thead>
+                  <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+                </thead>
+                <tbody>
+                  ${rows
+                    .map(
+                      (row) =>
+                        `<tr>${row
+                          .map((cell) => `<td>${escapeHtml(cell)}</td>`)
+                          .join("")}</tr>`
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </body>
+          </html>
+        `
+        : csv,
       format === "excel"
         ? "application/vnd.ms-excel;charset=utf-8"
         : "text/csv;charset=utf-8"
     );
+  };
+
+  const copyRows = async () => {
+    const headers = exportColumns.map((column) => column.label);
+    const text = [headers, ...getExportRows()].map((row) => row.join("\t")).join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setExportOpen(false);
+      setPageMessage("Cədvəl məlumatları kopyalandı.");
+    } catch {
+      setExportOpen(false);
+      setPageMessage("Kopyalama alınmadı.");
+    }
   };
 
   if (!hasPermission("can_view_applications")) {
@@ -490,94 +667,104 @@ export default function OrganizationApplicationsPage() {
         </div>
       </div>
 
-      <SectionPanel
-        title="Müraciət siyahısı"
-        desc="Siyahıda yalnız bankınıza təyin edilmiş müraciətlər göstərilir."
-      >
-        <div style={styles.filterPanel}>
-          <div style={styles.filters}>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Ad, referral, telefon və ya kredit növü"
-              style={styles.input}
-            />
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              style={styles.select}
-            >
-              <option value="all">Bütün statuslar</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {labelFor(status)}
-                </option>
-              ))}
-            </select>
-            <select
-              value={resultFilter}
-              onChange={(event) => setResultFilter(event.target.value)}
-              style={styles.select}
-            >
-              <option value="all">Bütün nəticələr</option>
-              {resultOptions.map((status) => (
-                <option key={status} value={status}>
-                  {labelFor(status)}
-                </option>
-              ))}
-            </select>
+      {pageMessage ? <div style={styles.messageBox}>{pageMessage}</div> : null}
+
+      <section style={styles.filterPanel}>
+        <div style={styles.panelHeader}>
+          <div>
+            <h2 style={styles.panelTitle}>Filterlər</h2>
+            <p style={styles.panelDesc}>Bankınıza təyin edilmiş müraciətləri sürətli axtarın və süzün.</p>
           </div>
         </div>
+        <div style={styles.filters}>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Ad, referral, telefon və ya kredit növü"
+            style={styles.input}
+          />
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            style={styles.select}
+          >
+            <option value="all">Bütün statuslar</option>
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>
+                {labelFor(status)}
+              </option>
+            ))}
+          </select>
+          <select
+            value={resultFilter}
+            onChange={(event) => setResultFilter(event.target.value)}
+            style={styles.select}
+          >
+            <option value="all">Bütün nəticələr</option>
+            {resultOptions.map((status) => (
+              <option key={status} value={status}>
+                {labelFor(status)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
 
-        <div style={styles.tableToolbar}>
-          <div style={styles.resultText}>
-            Tapıldı: <strong>{filteredMatches.length}</strong> müraciət
-          </div>
+      <section style={styles.tableToolbar}>
+        <div style={styles.resultText}>
+          Tapıldı: <strong>{filteredMatches.length}</strong> müraciət
+        </div>
 
-          <div style={styles.toolbarActions}>
-            <label style={styles.showLabel}>Göstər</label>
-            <select
-              value={rowLimit}
-              onChange={(event) => setRowLimit(event.target.value)}
-              style={styles.smallSelect}
+        <div style={styles.toolbarActions}>
+          <label style={styles.showLabel}>Göstər</label>
+          <select
+            value={rowLimit}
+            onChange={(event) => setRowLimit(event.target.value)}
+            style={styles.smallSelect}
+          >
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="all">Hamısı</option>
+          </select>
+
+          <button type="button" style={styles.columnBtn} onClick={() => setColumnPanelOpen(true)}>
+            Sütun seç
+          </button>
+
+          <div style={styles.exportWrap}>
+            <button
+              type="button"
+              style={{
+                ...styles.exportBtn,
+                ...(!canExportData ? styles.disabledBtn : {}),
+              }}
+              disabled={!canExportData}
+              title={!canExportData ? "Export üçün icazə tələb olunur" : "Məlumatı ixrac et"}
+              onClick={() => setExportOpen((value) => !value)}
             >
-              <option value="10">10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="all">Hamısı</option>
-            </select>
-
-            <button type="button" style={styles.columnBtn} onClick={() => setColumnPanelOpen(true)}>
-              Sütun seç
+              Export
             </button>
-
-            {canExportData ? (
-              <div style={styles.exportWrap}>
-                <button
-                  type="button"
-                  style={styles.exportBtn}
-                  onClick={() => setExportOpen((value) => !value)}
-                >
-                  Export
+            {exportOpen && canExportData ? (
+              <div style={styles.exportMenu}>
+                <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("csv")}>
+                  CSV
                 </button>
-                {exportOpen ? (
-                  <div style={styles.exportMenu}>
-                    <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("print")}>
-                      Çap / PDF
-                    </button>
-                    <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("csv")}>
-                      CSV
-                    </button>
-                    <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("excel")}>
-                      Excel file
-                    </button>
-                  </div>
-                ) : null}
+                <button type="button" style={styles.exportMenuItem} onClick={copyRows}>
+                  Kopyala
+                </button>
+                <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("print")}>
+                  Çap / PDF
+                </button>
+                <button type="button" style={styles.exportMenuItem} onClick={() => exportRows("excel")}>
+                  Excel file
+                </button>
               </div>
             ) : null}
           </div>
         </div>
+      </section>
 
         {loading ? <div style={styles.stateBox}>Müraciətlər yüklənir...</div> : null}
         {!loading && errorMessage ? <div style={styles.errorBox}>{errorMessage}</div> : null}
@@ -589,16 +776,10 @@ export default function OrganizationApplicationsPage() {
         ) : null}
 
         {!loading && !errorMessage && matches.length ? (
-          <div ref={tableSectionRef} style={styles.tableSection}>
-            <div style={{ ...styles.tableShell, width: `${tableShellWidth}px` }}>
+          <section ref={tableSectionRef} style={styles.tableSection}>
+            <div style={tableShellStyle}>
               <div style={styles.tableScroll}>
-                <table
-                  style={{
-                    ...styles.table,
-                    width: `${tableWidth}px`,
-                    minWidth: `${tableWidth}px`,
-                  }}
-                >
+                <table style={tableStyle}>
                   <colgroup>
                     {visibleColumns.map((column) => (
                       <col key={column.key} style={{ width: `${column.width}px` }} />
@@ -632,9 +813,8 @@ export default function OrganizationApplicationsPage() {
                 <div style={styles.emptyBox}>Filterlərə uyğun müraciət tapılmadı.</div>
               ) : null}
             </div>
-          </div>
+          </section>
         ) : null}
-      </SectionPanel>
 
       {columnPanelOpen ? (
         <div style={styles.modalBackdrop}>
@@ -651,16 +831,38 @@ export default function OrganizationApplicationsPage() {
             </div>
 
             <div style={styles.columnsGrid}>
-              {columns.map((column) => {
+              {orderedColumnsForPanel.map((column) => {
                 const isVisible = activeVisibleKeys.includes(column.key);
+                const visibleIndex = activeVisibleKeys.indexOf(column.key);
                 return (
                   <div
                     key={column.key}
+                    draggable={isVisible}
+                    onDragStart={() => {
+                      if (isVisible) setDraggedColumnKey(column.key);
+                    }}
+                    onDragOver={(event) => {
+                      if (isVisible) event.preventDefault();
+                    }}
+                    onDrop={() => {
+                      if (isVisible) moveColumnByDrag(column.key);
+                    }}
+                    onDragEnd={() => setDraggedColumnKey(null)}
                     style={{
                       ...styles.columnOptionRow,
+                      ...(draggedColumnKey === column.key ? styles.columnOptionRowDragging : {}),
                       ...(!isVisible ? styles.columnOptionRowHidden : {}),
                     }}
                   >
+                    <span
+                      title="Sütunu tutub sürüşdür"
+                      style={{
+                        ...styles.dragHandle,
+                        ...(!isVisible ? styles.dragHandleDisabled : {}),
+                      }}
+                    >
+                      ≡
+                    </span>
                     <label style={styles.columnOption}>
                       <input
                         type="checkbox"
@@ -670,19 +872,52 @@ export default function OrganizationApplicationsPage() {
                       />
                       <span>{column.label}</span>
                     </label>
+                    <div style={styles.columnMoveActions}>
+                      <button
+                        type="button"
+                        onClick={() => moveColumn(column.key, "up")}
+                        disabled={!isVisible || visibleIndex <= 0}
+                        style={{
+                          ...styles.moveBtn,
+                          ...(!isVisible || visibleIndex <= 0 ? styles.moveBtnDisabled : {}),
+                        }}
+                      >
+                        ↑
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => moveColumn(column.key, "down")}
+                        disabled={!isVisible || visibleIndex === activeVisibleKeys.length - 1}
+                        style={{
+                          ...styles.moveBtn,
+                          ...(!isVisible || visibleIndex === activeVisibleKeys.length - 1
+                            ? styles.moveBtnDisabled
+                            : {}),
+                        }}
+                      >
+                        ↓
+                      </button>
+                    </div>
                   </div>
                 );
               })}
             </div>
 
             <div style={styles.modalFooter}>
-              <button
-                type="button"
-                onClick={() => persistColumns(columns.map((column) => column.key))}
-                style={styles.secondaryBtn}
-              >
-                Hamısını seç
-              </button>
+              <div style={styles.modalFooterLeft}>
+                <button
+                  type="button"
+                  onClick={selectAllColumns}
+                  style={styles.secondaryBtn}
+                >
+                  Hamısını seç
+                </button>
+
+                <button type="button" onClick={resetColumns} style={styles.secondaryBtn}>
+                  Default görünüş
+                </button>
+              </div>
 
               <button type="button" onClick={() => setColumnPanelOpen(false)} style={styles.primaryBtn}>
                 Təsdiq et
@@ -723,9 +958,27 @@ const styles = {
   filterPanel: {
     background: "#ffffff",
     border: "1px solid #dbe4ee",
-    borderRadius: "16px",
+    borderRadius: "22px",
     padding: "18px",
     marginBottom: "14px",
+  },
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    marginBottom: "14px",
+  },
+  panelTitle: {
+    margin: 0,
+    color: "#0f172a",
+    fontSize: "18px",
+    fontWeight: 800,
+  },
+  panelDesc: {
+    margin: "6px 0 0",
+    color: "#64748b",
+    fontSize: "14px",
+    lineHeight: 1.5,
   },
   filters: {
     display: "grid",
@@ -761,7 +1014,7 @@ const styles = {
     flexWrap: "wrap",
     background: "#ffffff",
     border: "1px solid #dbe4ee",
-    borderRadius: "14px",
+    borderRadius: "18px",
     padding: "12px 14px",
     marginBottom: "14px",
   },
@@ -867,6 +1120,7 @@ const styles = {
   },
   tableSection: {
     width: "100%",
+    marginBottom: "18px",
   },
   tableShell: {
     display: "block",
@@ -877,7 +1131,7 @@ const styles = {
     width: "100%",
     overflowX: "auto",
     border: "1px solid #e2e8f0",
-    borderRadius: "16px",
+    borderRadius: "20px",
     background: "#ffffff",
   },
   table: {
@@ -910,7 +1164,8 @@ const styles = {
   },
   primaryCell: {
     color: "#0f172a",
-    fontWeight: 750,
+    fontSize: "14px",
+    fontWeight: 650,
     overflow: "hidden",
     textOverflow: "ellipsis",
   },
@@ -923,22 +1178,31 @@ const styles = {
     textOverflow: "ellipsis",
   },
   detailLink: {
-    color: "#047857",
+    color: "#0f172a",
     textDecoration: "none",
-    fontWeight: 800,
+    fontWeight: 700,
   },
   actionBtn: {
     display: "inline-flex",
-    minHeight: "36px",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: "10px",
+    minHeight: "38px",
+    borderRadius: "12px",
     background: "#0f172a",
     color: "#ffffff",
     padding: "0 14px",
     fontSize: "13px",
-    fontWeight: 700,
+    fontWeight: 600,
     textDecoration: "none",
+  },
+  mutedText: {
+    color: "#94a3b8",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
+  disabledBtn: {
+    opacity: 0.55,
+    cursor: "not-allowed",
   },
   badge: {
     display: "inline-flex",
@@ -989,7 +1253,7 @@ const styles = {
     width: "min(760px, 100%)",
     maxHeight: "90vh",
     background: "#ffffff",
-    borderRadius: "18px",
+    borderRadius: "24px",
     border: "1px solid #dbe4ee",
     boxShadow: "0 30px 80px rgba(15, 23, 42, 0.25)",
     overflow: "hidden",
@@ -1021,7 +1285,8 @@ const styles = {
     borderRadius: "12px",
     border: "1px solid #dbe4ee",
     background: "#ffffff",
-    fontSize: "16px",
+    fontSize: "28px",
+    lineHeight: 1,
     cursor: "pointer",
     color: "#64748b",
   },
@@ -1037,13 +1302,18 @@ const styles = {
   columnOptionRow: {
     minHeight: "44px",
     border: "1px solid #e2e8f0",
-    borderRadius: "12px",
+    borderRadius: "14px",
     padding: "0 10px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: "10px",
     background: "#ffffff",
+  },
+  columnOptionRowDragging: {
+    opacity: 0.45,
+    border: "1px dashed #0f172a",
+    background: "#f8fafc",
   },
   columnOptionRowHidden: {
     opacity: 0.55,
@@ -1056,6 +1326,47 @@ const styles = {
     fontSize: "14px",
     color: "#0f172a",
     cursor: "pointer",
+    flex: 1,
+    minWidth: 0,
+  },
+  dragHandle: {
+    width: "24px",
+    minWidth: "24px",
+    height: "30px",
+    borderRadius: "8px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#64748b",
+    fontSize: "22px",
+    fontWeight: 800,
+    cursor: "grab",
+    userSelect: "none",
+  },
+  dragHandleDisabled: {
+    cursor: "not-allowed",
+    opacity: 0.35,
+  },
+  columnMoveActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  },
+  moveBtn: {
+    width: "30px",
+    height: "30px",
+    borderRadius: "10px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontSize: "15px",
+    fontWeight: 800,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  moveBtnDisabled: {
+    opacity: 0.35,
+    cursor: "not-allowed",
   },
   checkbox: {
     width: "18px",
@@ -1070,6 +1381,11 @@ const styles = {
     gap: "12px",
     flexWrap: "wrap",
     flexShrink: 0,
+  },
+  modalFooterLeft: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
   },
   secondaryBtn: {
     minHeight: "40px",
