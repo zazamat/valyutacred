@@ -4,16 +4,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../../lib/supabaseClient";
-import { labelFor, yesNo } from "../../../../lib/labels";
+import { labelFor } from "../../../../lib/labels";
 import {
   PermissionDenied,
   useOrganizationPermissions,
 } from "../../_components/OrganizationPermissionsContext";
 import {
   EmptyState,
-  PageHeader,
   SectionPanel,
-  pageStyles,
 } from "../../_components/OrganizationPlaceholders";
 
 const MATCH_SELECT = `
@@ -55,24 +53,11 @@ const MATCH_SELECT = `
   )
 `;
 
-const APPLICATION_UPDATE_SELECT = `
-  id,
-  referral_id,
-  credit_result_status,
-  credit_result_source,
-  credit_confirmed_at,
-  credit_confirmed_by,
-  credit_disbursed_amount,
-  credit_disbursed_date
-`;
-
 const CREDIT_RESULT_OPTIONS = [
   { value: "under_review", label: "Baxılır" },
-  { value: "approved", label: "Təsdiqlənib" },
+  { value: "disbursed", label: "Kredit verilib" },
   { value: "rejected", label: "İmtina edilib" },
   { value: "customer_declined", label: "Müştəri imtina edib" },
-  { value: "disbursed", label: "Kredit verilib" },
-  { value: "expired", label: "Müddəti bitib" },
 ];
 
 const EDITABLE_CREDIT_STATUSES = new Set(
@@ -137,6 +122,15 @@ function Info({ label, value }) {
   );
 }
 
+function MiniMetric({ label, value }) {
+  return (
+    <div style={styles.metricItem}>
+      <div style={styles.metricLabel}>{label}</div>
+      <div style={styles.metricValue}>{value}</div>
+    </div>
+  );
+}
+
 function getTone(status) {
   if (status === "approved" || status === "disbursed" || status === "sent") return "success";
   if (status === "rejected" || status === "customer_declined" || status === "expired") return "danger";
@@ -146,36 +140,64 @@ function getTone(status) {
   return "neutral";
 }
 
+function getWorkflowSteps(match, application) {
+  const resultStatus = application?.credit_result_status;
+  const isRejected =
+    resultStatus === "rejected" ||
+    resultStatus === "customer_declined" ||
+    resultStatus === "expired";
+  const isSuccess = resultStatus === "disbursed" || resultStatus === "approved";
+  const isReview =
+    !resultStatus ||
+    resultStatus === "pending" ||
+    resultStatus === "under_review" ||
+    resultStatus === "reviewing" ||
+    resultStatus === "processing";
+
+  return [
+    {
+      title: "Müraciət yaradıldı",
+      desc: formatDateTime(application?.created_at),
+      tone: "complete",
+    },
+    {
+      title: "Banka təyin edildi",
+      desc: formatDateTime(match?.assigned_at || match?.matched_at),
+      tone: match?.visibility_status === "assigned" ? "complete" : "info",
+    },
+    {
+      title: "Baxılır",
+      desc: isReview ? "Bank qərarı gözlənilir" : "Baxış tamamlanıb",
+      tone: isReview ? "pending" : "complete",
+    },
+    {
+      title: "Nəticə",
+      desc: labelFor(resultStatus),
+      tone: isRejected ? "danger" : isSuccess ? "complete" : "info",
+    },
+  ];
+}
+
+function WorkflowStrip({ steps }) {
+  return (
+    <section style={styles.workflowStrip}>
+      {steps.map((step, index) => (
+        <div key={step.title} style={{ ...styles.workflowStep, ...styles[`workflowStep${step.tone}`] }}>
+          <div style={{ ...styles.workflowDot, ...styles[`workflow${step.tone}`] }}>
+            {index + 1}
+          </div>
+          <div style={styles.workflowBody}>
+            <div style={styles.workflowTitle}>{step.title}</div>
+            <div style={styles.workflowDesc}>{step.desc}</div>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function getEditableCreditStatus(status) {
   return EDITABLE_CREDIT_STATUSES.has(status) ? status : "under_review";
-}
-
-function readOrganizationUserSnapshot() {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const raw = localStorage.getItem("valyutacred_auth");
-    const auth = raw ? JSON.parse(raw) : null;
-
-    return {
-      userId: auth?.user_id || null,
-      email: auth?.email || "",
-      role: auth?.role || "organization_user",
-    };
-  } catch {
-    return {};
-  }
-}
-
-function getCreditResultAuditValues(item) {
-  return {
-    credit_result_status: item?.credit_result_status || null,
-    credit_disbursed_amount: item?.credit_disbursed_amount ?? null,
-    credit_disbursed_date: item?.credit_disbursed_date || null,
-    credit_result_source: item?.credit_result_source || null,
-    credit_confirmed_at: item?.credit_confirmed_at || null,
-    credit_confirmed_by: item?.credit_confirmed_by || null,
-  };
 }
 
 function getMonetizationText(match, application) {
@@ -280,12 +302,16 @@ export default function OrganizationApplicationDetailPage() {
       customer: application?.full_name || "-",
       amount: formatMoney(application?.amount),
       result: labelFor(application?.credit_result_status),
-      status: labelFor(application?.status),
     };
   }, [application]);
 
   const monetization = useMemo(
     () => getMonetizationText(match, application),
+    [match, application]
+  );
+
+  const workflowSteps = useMemo(
+    () => getWorkflowSteps(match, application),
     [match, application]
   );
 
@@ -316,12 +342,8 @@ export default function OrganizationApplicationDetailPage() {
     }
 
     const isDisbursed = nextStatus === "disbursed";
-    const updatePayload = {
-      credit_result_status: nextStatus,
-      credit_result_source: "organization_cabinet",
-      credit_confirmed_at: new Date().toISOString(),
-      credit_confirmed_by: "",
-    };
+    let disbursedAmount = null;
+    let disbursedDate = null;
 
     if (isDisbursed) {
       const amount = Number(creditDisbursedAmount);
@@ -336,26 +358,24 @@ export default function OrganizationApplicationDetailPage() {
         return;
       }
 
-      updatePayload.credit_disbursed_amount = amount;
-      updatePayload.credit_disbursed_date = creditDisbursedDate;
+      disbursedAmount = amount;
+      disbursedDate = creditDisbursedDate;
     }
-
-    const organizationUser = readOrganizationUserSnapshot();
-    updatePayload.credit_confirmed_by =
-      organizationUser.email || organizationUser.userId || "organization_user";
-
-    const oldValues = getCreditResultAuditValues(application);
 
     setCreditResultLoading(true);
     setCreditResultError("");
     setCreditResultMessage("");
 
-    const { data, error } = await supabase
-      .from("applications")
-      .update(updatePayload)
-      .eq("id", Number(match.application_id))
-      .select(APPLICATION_UPDATE_SELECT)
-      .limit(1);
+    const { data, error } = await supabase.rpc(
+      "update_organization_credit_result",
+      {
+        p_match_id: Number(match.id),
+        p_credit_result_status: nextStatus,
+        p_credit_disbursed_amount: disbursedAmount,
+        p_credit_disbursed_date: disbursedDate,
+        p_note: cleanNote || null,
+      }
+    );
 
     if (error) {
       setCreditResultError("Kredit nəticəsi yenilənmədi: " + error.message);
@@ -363,35 +383,15 @@ export default function OrganizationApplicationDetailPage() {
       return;
     }
 
-    const [updatedRow] = data || [];
+    const updatedRow = Array.isArray(data) ? data[0] : data;
 
     if (!updatedRow) {
-      setCreditResultError("Kredit nəticəsi yenilənmədi: yenilənəcək müraciət tapılmadı.");
+      setCreditResultError("Kredit nəticəsi yenilənmədi: RPC nəticəsi boş qayıtdı.");
       setCreditResultLoading(false);
       return;
     }
 
     const updatedApplication = { ...application, ...updatedRow };
-    const newValues = getCreditResultAuditValues(updatedApplication);
-
-    const { error: logError } = await supabase
-      .from("application_status_logs")
-      .insert([
-        {
-          application_id: application.id,
-          referral_id: application.referral_id || null,
-          status_type: "credit_result_status",
-          old_status: application.credit_result_status || null,
-          new_status: nextStatus,
-          changed_by_user_id: organizationUser.userId || null,
-          changed_by_role: "organization_user",
-          changed_by_email: organizationUser.email || "",
-          source: "organization_cabinet",
-          note: cleanNote || null,
-          old_values: oldValues,
-          new_values: newValues,
-        },
-      ]);
 
     setMatch((current) =>
       current
@@ -406,13 +406,6 @@ export default function OrganizationApplicationDetailPage() {
     );
     setCreditResultLoading(false);
 
-    if (logError) {
-      setCreditResultError(
-        "Nəticə yeniləndi, amma audit log yazılmadı: " + logError.message
-      );
-      return;
-    }
-
     setCreditResultMessage("Kredit nəticəsi yadda saxlandı.");
     setCreditResultNote("");
   }
@@ -423,17 +416,29 @@ export default function OrganizationApplicationDetailPage() {
 
   return (
     <div>
-      <PageHeader
-        kicker="Müraciət detalı"
-        title={`Müraciət ${summary.referral}`}
-        subtitle="Müştəri, kredit nəticəsi və ödəniş modeli üzrə bank baxışı."
-      />
+      <header style={styles.header}>
+        <div style={styles.headerMain}>
+          <Link href="/organization/applications" style={styles.backLink}>
+            Müraciətlərə qayıt
+          </Link>
+          <div style={styles.kicker}>Müraciət detalı</div>
+          <h1 style={styles.title}>Müraciət {summary.referral}</h1>
+          <p style={styles.subtitle}>
+            Banka təyin edilmiş müraciət üzrə müştəri məlumatı, kredit şərtləri və qərar paneli.
+          </p>
+        </div>
 
-      <div style={styles.backRow}>
-        <Link href="/organization/applications" style={styles.backLink}>
-          Müraciətlərə qayıt
-        </Link>
-      </div>
+        {application ? (
+          <div style={styles.headerBadges}>
+            <div style={styles.headerBadgeBlock}>
+              <span style={styles.headerBadgeLabel}>Kredit nəticəsi</span>
+              <Badge tone={getTone(application.credit_result_status)}>
+                {labelFor(application.credit_result_status)}
+              </Badge>
+            </div>
+          </div>
+        ) : null}
+      </header>
 
       {loading ? <div style={styles.stateBox}>Müraciət yüklənir...</div> : null}
       {!loading && errorMessage ? <div style={styles.errorBox}>{errorMessage}</div> : null}
@@ -446,92 +451,20 @@ export default function OrganizationApplicationDetailPage() {
 
       {!loading && !errorMessage && match && application ? (
         <>
-          <div style={styles.summaryGrid}>
-            <div style={styles.summaryCard}>
-              <div style={styles.summaryLabel}>Müştəri</div>
-              <div style={styles.summaryValue}>{summary.customer}</div>
-            </div>
-            <div style={styles.summaryCard}>
-              <div style={styles.summaryLabel}>Kredit məbləği</div>
-              <div style={styles.summaryValue}>{summary.amount}</div>
-            </div>
-            <div style={styles.summaryCard}>
-              <div style={styles.summaryLabel}>Müraciət statusu</div>
-              <div style={styles.summaryValueSmall}>
-                <Badge tone={getTone(application.status)}>{summary.status}</Badge>
+          <WorkflowStrip steps={workflowSteps} />
+
+          <section style={styles.resultPanel}>
+            <div style={styles.resultPanelHeader}>
+              <div>
+                <h2 style={styles.resultPanelTitle}>Kredit qərarı</h2>
+                <p style={styles.resultPanelDesc}>
+                  Bank nümayəndəsi bu müraciət üzrə yekun kredit qərarını burada qeyd edə bilər.
+                </p>
               </div>
+              <Badge tone={getTone(application.credit_result_status)}>
+                {labelFor(application.credit_result_status)}
+              </Badge>
             </div>
-            <div style={styles.summaryCard}>
-              <div style={styles.summaryLabel}>Kredit nəticəsi</div>
-              <div style={styles.summaryValueSmall}>
-                <Badge tone={getTone(application.credit_result_status)}>
-                  {summary.result}
-                </Badge>
-              </div>
-            </div>
-          </div>
-
-          <section style={pageStyles.bottomGrid}>
-            <SectionPanel title="Müraciət xülasəsi" desc="Bankınıza yönləndirilmiş müraciətin əsas parametrləri.">
-              <InfoGrid>
-                <Info label="Referral ID" value={application.referral_id} />
-                <Info label="Yaranma tarixi" value={formatDateTime(application.created_at)} />
-                <Info label="Mənbə" value={labelFor(match.source)} />
-                <Info label="Təyin edilmə tarixi" value={formatDateTime(match.assigned_at)} />
-              </InfoGrid>
-            </SectionPanel>
-
-            <SectionPanel title="Müştəri məlumatları" desc="Əlaqə məlumatları yalnız icazə olduqda göstərilir.">
-              <InfoGrid>
-                <Info label="Ad soyad" value={application.full_name} />
-                <Info label="Müştəri tipi" value={labelFor(application.customer_type)} />
-                {canViewContact ? (
-                  <>
-                    <Info label="Telefon" value={application.phone} />
-                    <Info label="Email" value={application.email} />
-                  </>
-                ) : (
-                  <Info label="Əlaqə məlumatları" value="Bu istifadəçi üçün gizlidir" />
-                )}
-              </InfoGrid>
-            </SectionPanel>
-          </section>
-
-          <section style={{ ...pageStyles.bottomGrid, marginTop: 18 }}>
-            <SectionPanel title="Kredit məlumatları" desc="Müraciətdə seçilmiş kredit şərtləri.">
-              <InfoGrid>
-                <Info label="Kredit növü" value={application.credit_type} />
-                <Info label="Məbləğ" value={formatMoney(application.amount)} />
-                <Info label="Müddət" value={application.term_months ? `${application.term_months} ay` : "-"} />
-                <Info label="Paylanma tipi" value={labelFor(application.distribution_type)} />
-              </InfoGrid>
-            </SectionPanel>
-
-            <SectionPanel title="Status və nəticə" desc="Müraciətin cari vəziyyəti və kredit qərarı.">
-              <InfoGrid>
-                <Info
-                  label="Müraciət statusu"
-                  value={<Badge tone={getTone(application.status)}>{labelFor(application.status)}</Badge>}
-                />
-                <Info
-                  label="Kredit nəticəsi"
-                  value={
-                    <Badge tone={getTone(application.credit_result_status)}>
-                      {labelFor(application.credit_result_status)}
-                    </Badge>
-                  }
-                />
-                <Info label="Görünürlük" value={labelFor(match.visibility_status)} />
-                <Info label="Uyğunlaşma tarixi" value={formatDateTime(match.matched_at)} />
-              </InfoGrid>
-            </SectionPanel>
-          </section>
-
-          <div style={{ marginTop: 18 }}>
-            <SectionPanel
-              title="Kredit nəticəsini yenilə"
-              desc="Bank nümayəndəsi bu müraciət üzrə kredit qərarını burada qeyd edə bilər."
-            >
               {canUpdateCreditResult ? (
                 <form onSubmit={submitCreditResult} style={styles.resultForm}>
                   {creditResultMessage ? (
@@ -541,13 +474,6 @@ export default function OrganizationApplicationDetailPage() {
                   {creditResultError ? (
                     <div style={styles.inlineError}>{creditResultError}</div>
                   ) : null}
-
-                  <div style={styles.currentResultRow}>
-                    <span>Cari nəticə</span>
-                    <Badge tone={getTone(application.credit_result_status)}>
-                      {labelFor(application.credit_result_status)}
-                    </Badge>
-                  </div>
 
                   <div style={styles.formGrid}>
                     <label style={styles.formBlock}>
@@ -639,47 +565,68 @@ export default function OrganizationApplicationDetailPage() {
                   Bu müraciət üzrə kredit nəticəsini yeniləmək üçün icazə tələb olunur.
                 </div>
               )}
-            </SectionPanel>
-          </div>
+          </section>
 
-          <div style={{ marginTop: 18 }}>
+          <section style={styles.detailGrid}>
+            <SectionPanel title="Müraciət və kredit" desc="Müraciətin bank baxışı üçün əsas kredit parametrləri.">
+              <InfoGrid>
+                <Info label="Referral ID" value={application.referral_id} />
+                <Info label="Kredit növü" value={application.credit_type} />
+                <Info label="Məbləğ" value={formatMoney(application.amount)} />
+                <Info label="Müddət" value={application.term_months ? `${application.term_months} ay` : "-"} />
+                <Info label="Yaranma tarixi" value={formatDateTime(application.created_at)} />
+                <Info label="Təyin edilmə tarixi" value={formatDateTime(match.assigned_at || match.matched_at)} />
+                <Info label="Paylaşım tipi" value={labelFor(application.distribution_type || match.source)} />
+              </InfoGrid>
+            </SectionPanel>
+
+            <SectionPanel title="Müştəri" desc="Əlaqə məlumatları yalnız icazə olduqda göstərilir.">
+              <InfoGrid>
+                <Info label="Ad soyad" value={application.full_name} />
+                {canViewContact ? (
+                  <>
+                    <Info label="Telefon" value={application.phone} />
+                    <Info label="Email" value={application.email} />
+                  </>
+                ) : (
+                  <Info label="Əlaqə məlumatları" value="Bu istifadəçi üçün gizlidir" />
+                )}
+                <Info label="Müştəri tipi" value={labelFor(application.customer_type)} />
+              </InfoGrid>
+            </SectionPanel>
+          </section>
+
+          <section style={styles.detailGrid}>
             <SectionPanel
-              title="Komissiya və xərc məlumatı"
-              desc="Bu müraciət üzrə bankın hansı ödəniş modelinə düşdüyü."
+              title="Komissiya və xərc xülasəsi"
+              desc="Bu müraciət üzrə tətbiq olunan ödəniş modeli."
             >
               {canViewMonetization ? (
                 <>
                   <div style={styles.monetizationIntro}>
                     <strong>{monetization.title}</strong>
-                    <span>{monetization.lead}</span>
-                    <span>{monetization.success}</span>
                   </div>
 
-                  <InfoGrid>
-                    <Info label="Lead haqqı aktivdir" value={yesNo(application.lead_fee_enabled)} />
-                    <Info label="Lead haqqı" value={formatMoney(application.lead_fee_amount)} />
-                    <Info
-                      label="Lead haqqı statusu"
+                  <div style={styles.metricGrid}>
+                    <MiniMetric label="Lead haqqı" value={formatMoney(application.lead_fee_amount)} />
+                    <MiniMetric
+                      label="Lead statusu"
                       value={
                         <Badge tone={getTone(match.lead_fee_status)}>
                           {labelFor(match.lead_fee_status || "not_charged")}
                         </Badge>
                       }
                     />
-                    <Info label="Uğur komissiyası aktivdir" value={yesNo(application.success_fee_enabled)} />
-                    <Info label="Uğur komissiyası tipi" value={application.success_fee_type || "-"} />
-                    <Info label="Uğur komissiyası faizi" value={formatPercent(application.success_fee_percent)} />
-                    <Info label="Sabit uğur komissiyası" value={formatMoney(application.success_fee_fixed_amount)} />
-                    <Info label="Hesablanan uğur komissiyası" value={formatMoney(application.success_fee_amount)} />
-                    <Info
-                      label="Uğur komissiyası statusu"
+                    <MiniMetric label="Uğur komissiyası" value={formatMoney(application.success_fee_amount)} />
+                    <MiniMetric
+                      label="Uğur statusu"
                       value={
                         <Badge tone={getTone(match.success_fee_status)}>
                           {labelFor(match.success_fee_status || "not_applicable")}
                         </Badge>
                       }
                     />
-                  </InfoGrid>
+                  </div>
                 </>
               ) : (
                 <EmptyState
@@ -688,20 +635,13 @@ export default function OrganizationApplicationDetailPage() {
                 />
               )}
             </SectionPanel>
-          </div>
 
-          <div style={{ marginTop: 18 }}>
-            <SectionPanel title="Qeydlər" desc="Bank nümayəndəsi üçün əməliyyat qeydləri.">
-              <div style={styles.noteGrid}>
-                <div style={styles.noteBox}>
-                  Müraciət məlumatları bank baxışı üçün açılıb. Kredit nəticəsi icazə olduqda bu səhifədən yenilənə bilər.
-                </div>
-                <div style={styles.noteBox}>
-                  Müştəri ilə əlaqə saxlanılıbsa, nəticə daxili bank prosesinizdə qeyd olunmalıdır.
-                </div>
+            <SectionPanel title="Qeydlər" desc="Bank nümayəndəsi üçün yığcam əməliyyat qeydi.">
+              <div style={styles.noteBox}>
+                Müştəri ilə əlaqə və bankdaxili qərar qeydləri daxili prosesinizdə saxlanmalıdır.
               </div>
             </SectionPanel>
-          </div>
+          </section>
         </>
       ) : null}
     </div>
@@ -709,54 +649,158 @@ export default function OrganizationApplicationDetailPage() {
 }
 
 const styles = {
-  backRow: {
-    marginTop: "-8px",
+  header: {
     marginBottom: "18px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "18px",
+    flexWrap: "wrap",
+  },
+  headerMain: {
+    display: "grid",
+    gap: "8px",
+    minWidth: 0,
+    maxWidth: "760px",
+  },
+  kicker: {
+    color: "#059669",
+    fontSize: "13px",
+    fontWeight: 800,
+  },
+  title: {
+    margin: 0,
+    color: "#0f172a",
+    fontSize: "34px",
+    lineHeight: 1.12,
+    fontWeight: 850,
+    wordBreak: "break-word",
+  },
+  subtitle: {
+    margin: 0,
+    color: "#475569",
+    fontSize: "15px",
+    lineHeight: 1.6,
+  },
+  headerBadges: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
+  headerBadgeBlock: {
+    minHeight: "62px",
+    minWidth: "160px",
+    borderRadius: "14px",
+    border: "1px solid #e2e8f0",
+    background: "#ffffff",
+    padding: "10px 12px",
+    display: "grid",
+    alignContent: "center",
+    gap: "7px",
+    boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+  },
+  headerBadgeLabel: {
+    fontSize: "13px",
+    color: "#64748b",
+    fontWeight: 700,
   },
   backLink: {
     display: "inline-flex",
-    minHeight: "38px",
+    minHeight: "36px",
     alignItems: "center",
-    borderRadius: "12px",
-    border: "1px solid #dbe4ee",
-    background: "#ffffff",
-    color: "#0f172a",
+    justifyContent: "center",
+    width: "fit-content",
+    borderRadius: "10px",
+    border: "1px solid #bbf7d0",
+    background: "#ecfdf5",
+    color: "#047857",
     padding: "0 12px",
     fontSize: "13px",
-    fontWeight: 700,
+    fontWeight: 800,
     textDecoration: "none",
   },
-  summaryGrid: {
+  workflowStrip: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "14px",
-    marginBottom: "18px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: "12px",
+    marginBottom: "16px",
   },
-  summaryCard: {
-    background: "#ffffff",
+  workflowStep: {
+    position: "relative",
+    minHeight: "98px",
+    borderRadius: "16px",
     border: "1px solid #e2e8f0",
-    borderRadius: "14px",
-    padding: "18px",
+    background: "#ffffff",
+    padding: "14px",
+    display: "grid",
+    gridTemplateColumns: "38px 1fr",
+    gap: "10px",
+    overflow: "hidden",
     boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
-    minWidth: 0,
   },
-  summaryLabel: {
-    fontSize: "13px",
-    color: "#64748b",
-    fontWeight: 650,
-    marginBottom: "8px",
+  workflowStepcomplete: {
+    borderColor: "#bbf7d0",
+    background: "#f0fdf4",
   },
-  summaryValue: {
-    fontSize: "24px",
-    fontWeight: 800,
-    color: "#0f172a",
-    lineHeight: 1.25,
-    wordBreak: "break-word",
+  workflowSteppending: {
+    borderColor: "#fde68a",
+    background: "#fffbeb",
   },
-  summaryValueSmall: {
-    minHeight: "34px",
-    display: "flex",
+  workflowStepdanger: {
+    borderColor: "#fecaca",
+    background: "#fff7f7",
+  },
+  workflowStepinfo: {
+    borderColor: "#bfdbfe",
+    background: "#eff6ff",
+  },
+  workflowDot: {
+    width: "34px",
+    height: "34px",
+    borderRadius: "999px",
+    display: "inline-flex",
     alignItems: "center",
+    justifyContent: "center",
+    color: "#ffffff",
+    fontSize: "13px",
+    fontWeight: 900,
+    zIndex: 1,
+  },
+  workflowcomplete: {
+    background: "#16a34a",
+  },
+  workflowpending: {
+    background: "#f59e0b",
+  },
+  workflowdanger: {
+    background: "#dc2626",
+  },
+  workflowinfo: {
+    background: "#2563eb",
+  },
+  workflowBody: {
+    minWidth: 0,
+    zIndex: 1,
+  },
+  workflowTitle: {
+    color: "#0f172a",
+    fontSize: "14px",
+    fontWeight: 850,
+    lineHeight: 1.3,
+  },
+  workflowDesc: {
+    marginTop: "5px",
+    color: "#64748b",
+    fontSize: "12px",
+    lineHeight: 1.45,
+  },
+  detailGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: "16px",
+    alignItems: "start",
+    marginBottom: "16px",
   },
   infoGrid: {
     display: "grid",
@@ -816,9 +860,9 @@ const styles = {
   },
   monetizationIntro: {
     borderRadius: "14px",
-    border: "1px solid #bbf7d0",
-    background: "#ecfdf5",
-    color: "#065f46",
+    border: "1px solid #bfdbfe",
+    background: "#eff6ff",
+    color: "#1d4ed8",
     padding: "14px",
     display: "grid",
     gap: "7px",
@@ -826,23 +870,65 @@ const styles = {
     fontSize: "14px",
     lineHeight: 1.55,
   },
-  resultForm: {
+  metricGrid: {
     display: "grid",
-    gap: "14px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "10px",
   },
-  currentResultRow: {
-    minHeight: "54px",
+  metricItem: {
+    minHeight: "74px",
     borderRadius: "12px",
     border: "1px solid #e2e8f0",
     background: "#f8fafc",
-    padding: "0 14px",
+    padding: "12px",
+    display: "grid",
+    alignContent: "center",
+    gap: "7px",
+  },
+  metricLabel: {
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: 800,
+    textTransform: "uppercase",
+  },
+  metricValue: {
+    color: "#0f172a",
+    fontSize: "14px",
+    fontWeight: 800,
+    lineHeight: 1.4,
+  },
+  resultPanel: {
+    marginBottom: "16px",
+    background: "#ffffff",
+    border: "1px solid #bbf7d0",
+    borderRadius: "18px",
+    padding: "18px",
+    boxShadow: "0 14px 32px rgba(22, 163, 74, 0.08)",
+  },
+  resultPanelHeader: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: "12px",
-    color: "#334155",
-    fontSize: "14px",
-    fontWeight: 700,
+    flexWrap: "wrap",
+    marginBottom: "14px",
+  },
+  resultPanelTitle: {
+    margin: 0,
+    color: "#0f172a",
+    fontSize: "18px",
+    fontWeight: 800,
+    lineHeight: 1.25,
+  },
+  resultPanelDesc: {
+    margin: "6px 0 0",
+    color: "#64748b",
+    fontSize: "13px",
+    lineHeight: 1.5,
+  },
+  resultForm: {
+    display: "grid",
+    gap: "14px",
   },
   formGrid: {
     display: "grid",

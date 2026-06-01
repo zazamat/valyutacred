@@ -2,13 +2,19 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import {
   OrganizationPermissionsProvider,
   PermissionDenied,
   defaultPermissions,
 } from "./OrganizationPermissionsContext";
+
+const AUTH_STATUS = {
+  checking: "checking",
+  ready: "ready",
+  redirecting: "redirecting",
+};
 
 const menuGroups = [
   {
@@ -114,39 +120,43 @@ export default function OrganizationShell({ children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [authStatus, setAuthStatus] = useState(AUTH_STATUS.checking);
   const [organizationUser, setOrganizationUser] = useState(null);
   const [organization, setOrganization] = useState(null);
   const [permissions, setPermissions] = useState(defaultPermissions);
   const [accessMessage, setAccessMessage] = useState("");
   const [authMessage, setAuthMessage] = useState("Organization kabineti yoxlanılır...");
+  const routerRef = useRef(router);
 
   useEffect(() => {
-    let active = true;
-    const authTimeout = window.setTimeout(() => {
-      if (!active) return;
-      setAccessMessage("Kabinet yoxlaması tamamlanmadı.");
+    routerRef.current = router;
+  }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const finish = (nextStatus = AUTH_STATUS.ready) => {
+      if (cancelled) return;
       setAuthMessage("");
-      setIsCheckingAuth(false);
-    }, 6000);
-
-    setMounted(true);
-
-    const snapshot = readOrganizationAuthSnapshot();
-
-    if (!snapshot) {
-      setOrganizationUser(null);
-      setAuthMessage("Giriş səhifəsinə yönləndirilir...");
-      setIsCheckingAuth(false);
-      window.clearTimeout(authTimeout);
-      router.replace("/login");
-      return;
-    }
+      setAuthStatus(nextStatus);
+    };
 
     async function loadAccess() {
-      setIsCheckingAuth(true);
+      const snapshot = readOrganizationAuthSnapshot();
+
+      if (!snapshot) {
+        setOrganizationUser(null);
+        setOrganization(null);
+        setPermissions(defaultPermissions);
+        setAccessMessage("");
+        setAuthMessage("Giriş səhifəsinə yönləndirilir...");
+        setAuthStatus(AUTH_STATUS.redirecting);
+        routerRef.current.replace("/login");
+        return;
+      }
+
       setAccessMessage("");
+      setOrganizationUser(snapshot);
 
       let organizationRes;
       let permissionsRes;
@@ -173,18 +183,15 @@ export default function OrganizationShell({ children }) {
           "Organization access query timed out"
         );
       } catch {
-        if (!active) return;
+        if (cancelled) return;
         setOrganization(null);
         setPermissions(defaultPermissions);
-        setOrganizationUser(snapshot);
         setAccessMessage("Kabinet yoxlaması tamamlanmadı.");
-        setAuthMessage("");
-        setIsCheckingAuth(false);
-        window.clearTimeout(authTimeout);
+        finish();
         return;
       }
 
-      if (!active) return;
+      if (cancelled) return;
 
       if (organizationRes.error || !organizationRes.data) {
         setAccessMessage("Təşkilat məlumatları yüklənmədi.");
@@ -198,19 +205,15 @@ export default function OrganizationShell({ children }) {
 
       setOrganization(organizationRes.data || null);
       setPermissions({ ...defaultPermissions, ...(permissionsRes.data || {}) });
-      setOrganizationUser(snapshot);
-      setAuthMessage("");
-      setIsCheckingAuth(false);
-      window.clearTimeout(authTimeout);
+      finish();
     }
 
     loadAccess();
 
     return () => {
-      active = false;
-      window.clearTimeout(authTimeout);
+      cancelled = true;
     };
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     const syncScreen = () => {
@@ -255,7 +258,7 @@ export default function OrganizationShell({ children }) {
     organizationUser?.email ||
     "Organization user";
 
-  if (!mounted || isCheckingAuth) {
+  if (authStatus === AUTH_STATUS.checking) {
     return (
       <div style={styles.loadingPage}>
         <div style={styles.loadingCard}>{authMessage}</div>
@@ -263,7 +266,7 @@ export default function OrganizationShell({ children }) {
     );
   }
 
-  if (!organizationUser) {
+  if (authStatus === AUTH_STATUS.redirecting || !organizationUser) {
     return (
       <div style={styles.loadingPage}>
         <div style={styles.loadingCard}>
