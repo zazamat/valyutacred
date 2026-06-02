@@ -35,6 +35,7 @@ const MATCH_SELECT = `
     credit_type,
     amount,
     term_months,
+    interest_rate,
     status,
     distribution_type,
     credit_result_status,
@@ -131,6 +132,33 @@ function MiniMetric({ label, value }) {
   );
 }
 
+function OverviewCard({ title, icon, children }) {
+  return (
+    <article style={styles.overviewCard}>
+      <div style={styles.overviewCardHeader}>
+        <span style={styles.overviewIcon}>{icon}</span>
+        <h2 style={styles.overviewTitle}>{title}</h2>
+      </div>
+      <div style={styles.overviewRows}>{children}</div>
+    </article>
+  );
+}
+
+function OverviewRow({ label, value, badgeTone }) {
+  const isEmpty = value === null || value === undefined || value === "";
+
+  return (
+    <div style={styles.overviewRow}>
+      <span style={styles.overviewLabel}>{label}</span>
+      {badgeTone && !isEmpty ? (
+        <Badge tone={badgeTone}>{value}</Badge>
+      ) : (
+        <strong style={styles.overviewValue}>{isEmpty ? "-" : value}</strong>
+      )}
+    </div>
+  );
+}
+
 function getTone(status) {
   if (status === "approved" || status === "disbursed" || status === "sent") return "success";
   if (status === "rejected" || status === "customer_declined" || status === "expired") return "danger";
@@ -138,62 +166,6 @@ function getTone(status) {
     return "warning";
   }
   return "neutral";
-}
-
-function getWorkflowSteps(match, application) {
-  const resultStatus = application?.credit_result_status;
-  const isRejected =
-    resultStatus === "rejected" ||
-    resultStatus === "customer_declined" ||
-    resultStatus === "expired";
-  const isSuccess = resultStatus === "disbursed" || resultStatus === "approved";
-  const isReview =
-    !resultStatus ||
-    resultStatus === "pending" ||
-    resultStatus === "under_review" ||
-    resultStatus === "reviewing" ||
-    resultStatus === "processing";
-
-  return [
-    {
-      title: "Müraciət yaradıldı",
-      desc: formatDateTime(application?.created_at),
-      tone: "complete",
-    },
-    {
-      title: "Banka təyin edildi",
-      desc: formatDateTime(match?.assigned_at || match?.matched_at),
-      tone: match?.visibility_status === "assigned" ? "complete" : "info",
-    },
-    {
-      title: "Baxılır",
-      desc: isReview ? "Bank qərarı gözlənilir" : "Baxış tamamlanıb",
-      tone: isReview ? "pending" : "complete",
-    },
-    {
-      title: "Nəticə",
-      desc: labelFor(resultStatus),
-      tone: isRejected ? "danger" : isSuccess ? "complete" : "info",
-    },
-  ];
-}
-
-function WorkflowStrip({ steps }) {
-  return (
-    <section style={styles.workflowStrip}>
-      {steps.map((step, index) => (
-        <div key={step.title} style={{ ...styles.workflowStep, ...styles[`workflowStep${step.tone}`] }}>
-          <div style={{ ...styles.workflowDot, ...styles[`workflow${step.tone}`] }}>
-            {index + 1}
-          </div>
-          <div style={styles.workflowBody}>
-            <div style={styles.workflowTitle}>{step.title}</div>
-            <div style={styles.workflowDesc}>{step.desc}</div>
-          </div>
-        </div>
-      ))}
-    </section>
-  );
 }
 
 function getEditableCreditStatus(status) {
@@ -300,18 +272,25 @@ export default function OrganizationApplicationDetailPage() {
     return {
       referral: application?.referral_id || "-",
       customer: application?.full_name || "-",
+      phone: canViewContact ? application?.phone || "-" : "-",
+      email: canViewContact ? application?.email || "-" : "-",
       amount: formatMoney(application?.amount),
-      result: labelFor(application?.credit_result_status),
+      term: application?.term_months ? `${application.term_months} ay` : "-",
+      interest: formatPercent(application?.interest_rate),
+      type: labelFor(application?.customer_type),
+      product: application?.credit_type || "-",
+      result: labelFor(application?.credit_result_status || application?.status),
+      leadFee: canViewMonetization ? formatMoney(application?.lead_fee_amount) : "-",
+      referralValue: canViewMonetization
+        ? application?.success_fee_type === "percent"
+          ? formatPercent(application?.success_fee_percent)
+          : formatMoney(application?.success_fee_fixed_amount ?? application?.success_fee_amount)
+        : "-",
     };
-  }, [application]);
+  }, [application, canViewContact, canViewMonetization]);
 
   const monetization = useMemo(
     () => getMonetizationText(match, application),
-    [match, application]
-  );
-
-  const workflowSteps = useMemo(
-    () => getWorkflowSteps(match, application),
     [match, application]
   );
 
@@ -418,26 +397,29 @@ export default function OrganizationApplicationDetailPage() {
     <div>
       <header style={styles.header}>
         <div style={styles.headerMain}>
-          <Link href="/organization/applications" style={styles.backLink}>
-            Müraciətlərə qayıt
-          </Link>
-          <div style={styles.kicker}>Müraciət detalı</div>
-          <h1 style={styles.title}>Müraciət {summary.referral}</h1>
+          <h1 style={styles.pageTitle}>Qərar Paneli</h1>
           <p style={styles.subtitle}>
-            Banka təyin edilmiş müraciət üzrə müştəri məlumatı, kredit şərtləri və qərar paneli.
+            Müraciət üzrə müştəri məlumatı, kredit şərtləri və qərar paneli.
           </p>
         </div>
 
-        {application ? (
-          <div style={styles.headerBadges}>
-            <div style={styles.headerBadgeBlock}>
-              <span style={styles.headerBadgeLabel}>Kredit nəticəsi</span>
-              <Badge tone={getTone(application.credit_result_status)}>
-                {labelFor(application.credit_result_status)}
-              </Badge>
+        <div style={styles.headerActions}>
+          <Link href="/organization/applications" style={styles.backLink}>
+            Müraciətlərə qayıt
+          </Link>
+
+          {application ? (
+            <div style={styles.profileCard}>
+              <div style={styles.profileAvatar}>
+                {(application.full_name || "?").trim().slice(0, 1).toUpperCase()}
+              </div>
+              <div style={styles.profileInfo}>
+                <div style={styles.profileName}>{application.full_name || "-"}</div>
+                <div style={styles.profilePhone}>{summary.phone}</div>
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </header>
 
       {loading ? <div style={styles.stateBox}>Müraciət yüklənir...</div> : null}
@@ -451,7 +433,35 @@ export default function OrganizationApplicationDetailPage() {
 
       {!loading && !errorMessage && match && application ? (
         <>
-          <WorkflowStrip steps={workflowSteps} />
+          <section style={styles.overviewGrid}>
+            <OverviewCard title="Müştəri və əlaqə" icon="ID">
+              <OverviewRow label="Referal kodu" value={summary.referral} />
+              <OverviewRow label="Telefon" value={summary.phone} />
+              <OverviewRow label="Email" value={summary.email} />
+            </OverviewCard>
+
+            <OverviewCard title="Kredit şərtləri" icon="AZN">
+              <OverviewRow label="Məbləğ" value={summary.amount} />
+              <OverviewRow label="Müddət" value={summary.term} />
+              <OverviewRow label="Faiz" value={summary.interest} />
+            </OverviewCard>
+
+            <OverviewCard title="Müraciət məlumatı" icon="APP">
+              <OverviewRow label="Tipi" value={summary.type} />
+              <OverviewRow label="Məhsul" value={summary.product} />
+              <OverviewRow
+                label="Status"
+                value={summary.result}
+                badgeTone={getTone(application.credit_result_status || application.status)}
+              />
+            </OverviewCard>
+
+            <OverviewCard title="Referral və dəyər" icon="%">
+              <OverviewRow label="Lead qiyməti" value={summary.leadFee} />
+              <OverviewRow label="Referral" value={summary.referralValue} />
+              <OverviewRow label="Model" value={canViewMonetization ? labelFor(match.monetization_model) : "-"} />
+            </OverviewCard>
+          </section>
 
           <section style={styles.resultPanel}>
             <div style={styles.resultPanelHeader}>
@@ -568,35 +578,6 @@ export default function OrganizationApplicationDetailPage() {
           </section>
 
           <section style={styles.detailGrid}>
-            <SectionPanel title="Müraciət və kredit" desc="Müraciətin bank baxışı üçün əsas kredit parametrləri.">
-              <InfoGrid>
-                <Info label="Referral ID" value={application.referral_id} />
-                <Info label="Kredit növü" value={application.credit_type} />
-                <Info label="Məbləğ" value={formatMoney(application.amount)} />
-                <Info label="Müddət" value={application.term_months ? `${application.term_months} ay` : "-"} />
-                <Info label="Yaranma tarixi" value={formatDateTime(application.created_at)} />
-                <Info label="Təyin edilmə tarixi" value={formatDateTime(match.assigned_at || match.matched_at)} />
-                <Info label="Paylaşım tipi" value={labelFor(application.distribution_type || match.source)} />
-              </InfoGrid>
-            </SectionPanel>
-
-            <SectionPanel title="Müştəri" desc="Əlaqə məlumatları yalnız icazə olduqda göstərilir.">
-              <InfoGrid>
-                <Info label="Ad soyad" value={application.full_name} />
-                {canViewContact ? (
-                  <>
-                    <Info label="Telefon" value={application.phone} />
-                    <Info label="Email" value={application.email} />
-                  </>
-                ) : (
-                  <Info label="Əlaqə məlumatları" value="Bu istifadəçi üçün gizlidir" />
-                )}
-                <Info label="Müştəri tipi" value={labelFor(application.customer_type)} />
-              </InfoGrid>
-            </SectionPanel>
-          </section>
-
-          <section style={styles.detailGrid}>
             <SectionPanel
               title="Komissiya və xərc xülasəsi"
               desc="Bu müraciət üzrə tətbiq olunan ödəniş modeli."
@@ -659,22 +640,16 @@ const styles = {
   },
   headerMain: {
     display: "grid",
-    gap: "8px",
+    gap: "6px",
     minWidth: 0,
     maxWidth: "760px",
   },
-  kicker: {
-    color: "#059669",
-    fontSize: "13px",
-    fontWeight: 800,
-  },
-  title: {
+  pageTitle: {
     margin: 0,
     color: "#0f172a",
-    fontSize: "34px",
-    lineHeight: 1.12,
-    fontWeight: 850,
-    wordBreak: "break-word",
+    fontSize: "24px",
+    lineHeight: 1.2,
+    fontWeight: 650,
   },
   subtitle: {
     margin: 0,
@@ -682,118 +657,135 @@ const styles = {
     fontSize: "15px",
     lineHeight: 1.6,
   },
-  headerBadges: {
+  headerActions: {
     display: "flex",
-    gap: "10px",
-    flexWrap: "wrap",
+    alignItems: "center",
     justifyContent: "flex-end",
+    gap: "12px",
+    flexWrap: "wrap",
   },
-  headerBadgeBlock: {
-    minHeight: "62px",
-    minWidth: "160px",
-    borderRadius: "14px",
-    border: "1px solid #e2e8f0",
+  profileCard: {
+    minWidth: "260px",
+    borderRadius: "16px",
+    border: "1px solid #e6edf5",
     background: "#ffffff",
-    padding: "10px 12px",
+    padding: "13px",
     display: "grid",
-    alignContent: "center",
-    gap: "7px",
-    boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+    gridTemplateColumns: "42px 1fr",
+    alignItems: "center",
+    gap: "12px",
+    boxShadow: "0 6px 18px rgba(15,23,42,0.035)",
   },
-  headerBadgeLabel: {
-    fontSize: "13px",
-    color: "#64748b",
+  profileAvatar: {
+    width: "42px",
+    height: "42px",
+    borderRadius: "14px",
+    background: "#f0fdf4",
+    color: "#15803d",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "16px",
     fontWeight: 700,
+  },
+  profileInfo: {
+    minWidth: 0,
+  },
+  profileName: {
+    color: "#0f172a",
+    fontSize: "15px",
+    fontWeight: 650,
+    lineHeight: 1.3,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  profilePhone: {
+    marginTop: "4px",
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: 500,
   },
   backLink: {
     display: "inline-flex",
-    minHeight: "36px",
+    minHeight: "34px",
     alignItems: "center",
     justifyContent: "center",
     width: "fit-content",
-    borderRadius: "10px",
+    borderRadius: "999px",
     border: "1px solid #bbf7d0",
-    background: "#ecfdf5",
+    background: "#ffffff",
     color: "#047857",
-    padding: "0 12px",
-    fontSize: "13px",
-    fontWeight: 800,
+    padding: "0 13px",
+    fontSize: "12px",
+    fontWeight: 600,
     textDecoration: "none",
   },
-  workflowStrip: {
+  overviewGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
     gap: "12px",
-    marginBottom: "16px",
+    marginBottom: "14px",
   },
-  workflowStep: {
-    position: "relative",
-    minHeight: "98px",
+  overviewCard: {
+    minHeight: "150px",
     borderRadius: "16px",
-    border: "1px solid #e2e8f0",
+    border: "1px solid #e6edf5",
     background: "#ffffff",
     padding: "14px",
     display: "grid",
-    gridTemplateColumns: "38px 1fr",
-    gap: "10px",
-    overflow: "hidden",
-    boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+    alignContent: "start",
+    gap: "11px",
+    boxShadow: "0 4px 14px rgba(15,23,42,0.03)",
   },
-  workflowStepcomplete: {
-    borderColor: "#bbf7d0",
-    background: "#f0fdf4",
+  overviewCardHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
   },
-  workflowSteppending: {
-    borderColor: "#fde68a",
-    background: "#fffbeb",
-  },
-  workflowStepdanger: {
-    borderColor: "#fecaca",
-    background: "#fff7f7",
-  },
-  workflowStepinfo: {
-    borderColor: "#bfdbfe",
-    background: "#eff6ff",
-  },
-  workflowDot: {
-    width: "34px",
-    height: "34px",
-    borderRadius: "999px",
+  overviewIcon: {
+    minWidth: "28px",
+    height: "28px",
+    borderRadius: "10px",
+    background: "#f8fafc",
+    color: "#475569",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#ffffff",
-    fontSize: "13px",
-    fontWeight: 900,
-    zIndex: 1,
+    fontSize: "10px",
+    fontWeight: 650,
   },
-  workflowcomplete: {
-    background: "#16a34a",
-  },
-  workflowpending: {
-    background: "#f59e0b",
-  },
-  workflowdanger: {
-    background: "#dc2626",
-  },
-  workflowinfo: {
-    background: "#2563eb",
-  },
-  workflowBody: {
-    minWidth: 0,
-    zIndex: 1,
-  },
-  workflowTitle: {
+  overviewTitle: {
+    margin: 0,
     color: "#0f172a",
     fontSize: "14px",
-    fontWeight: 850,
+    fontWeight: 650,
+    lineHeight: 1.25,
+  },
+  overviewRows: {
+    display: "grid",
+  },
+  overviewRow: {
+    display: "grid",
+    gridTemplateColumns: "96px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: "10px",
+    minHeight: "30px",
+    padding: "7px 0",
+    borderTop: "1px solid #f1f5f9",
+  },
+  overviewLabel: {
+    color: "#64748b",
+    fontSize: "11px",
+    fontWeight: 500,
     lineHeight: 1.3,
   },
-  workflowDesc: {
-    marginTop: "5px",
-    color: "#64748b",
-    fontSize: "12px",
-    lineHeight: 1.45,
+  overviewValue: {
+    color: "#1e293b",
+    fontSize: "13px",
+    fontWeight: 600,
+    lineHeight: 1.35,
+    wordBreak: "break-word",
   },
   detailGrid: {
     display: "grid",
@@ -808,66 +800,66 @@ const styles = {
     gap: "12px",
   },
   infoItem: {
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
+    background: "#fbfdff",
+    border: "1px solid #edf2f7",
     borderRadius: "12px",
-    padding: "13px",
+    padding: "12px",
     minWidth: 0,
   },
   infoLabel: {
-    fontSize: "12px",
+    fontSize: "11px",
     color: "#64748b",
-    fontWeight: 700,
-    marginBottom: "7px",
+    fontWeight: 500,
+    marginBottom: "6px",
     textTransform: "uppercase",
   },
   infoValue: {
-    fontSize: "14px",
-    fontWeight: 650,
-    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 600,
+    color: "#1e293b",
     lineHeight: 1.5,
     wordBreak: "break-word",
   },
   badge: {
     display: "inline-flex",
-    minHeight: "32px",
+    minHeight: "26px",
     alignItems: "center",
     borderRadius: "999px",
-    padding: "0 10px",
-    fontSize: "12px",
-    fontWeight: 750,
+    padding: "0 9px",
+    fontSize: "11px",
+    fontWeight: 600,
     whiteSpace: "nowrap",
   },
   neutral: {
     background: "#f8fafc",
     color: "#475569",
-    border: "1px solid #e2e8f0",
+    border: "1px solid #e6edf5",
   },
   warning: {
-    background: "#fef3c7",
-    color: "#92400e",
-    border: "1px solid #fde68a",
+    background: "#fffbeb",
+    color: "#854d0e",
+    border: "1px solid #fef3c7",
   },
   success: {
-    background: "#dcfce7",
+    background: "#f0fdf4",
     color: "#166534",
-    border: "1px solid #bbf7d0",
+    border: "1px solid #dcfce7",
   },
   danger: {
-    background: "#fee2e2",
+    background: "#fff1f2",
     color: "#991b1b",
-    border: "1px solid #fecaca",
+    border: "1px solid #ffe4e6",
   },
   monetizationIntro: {
-    borderRadius: "14px",
-    border: "1px solid #bfdbfe",
-    background: "#eff6ff",
-    color: "#1d4ed8",
-    padding: "14px",
+    borderRadius: "12px",
+    border: "1px solid #e6edf5",
+    background: "#f8fafc",
+    color: "#334155",
+    padding: "12px",
     display: "grid",
     gap: "7px",
     marginBottom: "14px",
-    fontSize: "14px",
+    fontSize: "13px",
     lineHeight: 1.55,
   },
   metricGrid: {
@@ -876,10 +868,10 @@ const styles = {
     gap: "10px",
   },
   metricItem: {
-    minHeight: "74px",
+    minHeight: "66px",
     borderRadius: "12px",
-    border: "1px solid #e2e8f0",
-    background: "#f8fafc",
+    border: "1px solid #edf2f7",
+    background: "#fbfdff",
     padding: "12px",
     display: "grid",
     alignContent: "center",
@@ -887,23 +879,23 @@ const styles = {
   },
   metricLabel: {
     color: "#64748b",
-    fontSize: "12px",
-    fontWeight: 800,
+    fontSize: "11px",
+    fontWeight: 500,
     textTransform: "uppercase",
   },
   metricValue: {
-    color: "#0f172a",
-    fontSize: "14px",
-    fontWeight: 800,
+    color: "#1e293b",
+    fontSize: "13px",
+    fontWeight: 600,
     lineHeight: 1.4,
   },
   resultPanel: {
-    marginBottom: "16px",
+    marginBottom: "14px",
     background: "#ffffff",
-    border: "1px solid #bbf7d0",
-    borderRadius: "18px",
-    padding: "18px",
-    boxShadow: "0 14px 32px rgba(22, 163, 74, 0.08)",
+    border: "1px solid #e6edf5",
+    borderRadius: "16px",
+    padding: "16px",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.035)",
   },
   resultPanelHeader: {
     display: "flex",
@@ -916,8 +908,8 @@ const styles = {
   resultPanelTitle: {
     margin: 0,
     color: "#0f172a",
-    fontSize: "18px",
-    fontWeight: 800,
+    fontSize: "16px",
+    fontWeight: 650,
     lineHeight: 1.25,
   },
   resultPanelDesc: {

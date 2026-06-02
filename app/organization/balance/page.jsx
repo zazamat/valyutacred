@@ -7,13 +7,6 @@ import {
   PermissionDenied,
   useOrganizationPermissions,
 } from "../_components/OrganizationPermissionsContext";
-import {
-  EmptyState,
-  PageHeader,
-  SectionPanel,
-  StatCard,
-  pageStyles,
-} from "../_components/OrganizationPlaceholders";
 
 const TRANSACTION_SELECT = `
   id,
@@ -138,6 +131,55 @@ function MiniBarChart({ items, emptyTitle, emptyDesc, money = false }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function BalanceHeader() {
+  return (
+    <header style={styles.header}>
+      <div style={styles.kicker}>Maliyyə</div>
+      <h1 style={styles.pageTitle}>Balans</h1>
+      <p style={styles.subtitle}>
+        Cari balans, bu ay üzrə xərclər və balans əməliyyatları üzrə tarixçə.
+      </p>
+    </header>
+  );
+}
+
+function BalanceStatCard({ icon, title, value, desc }) {
+  return (
+    <article style={styles.statCard}>
+      <div style={styles.statTop}>
+        <span style={styles.statIcon}>{icon}</span>
+        <span style={styles.statLabel}>{title}</span>
+      </div>
+      <div style={styles.statValue}>{value}</div>
+      <div style={styles.statDesc}>{desc}</div>
+    </article>
+  );
+}
+
+function BalancePanel({ title, desc, children }) {
+  return (
+    <section style={styles.panel}>
+      <div style={styles.panelHeader}>
+        <h2 style={styles.panelTitle}>{title}</h2>
+        {desc ? <p style={styles.panelDesc}>{desc}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function CompactEmpty({ title, desc }) {
+  return (
+    <div style={styles.compactEmpty}>
+      <div style={styles.emptyMark}>i</div>
+      <div style={styles.emptyCopy}>
+        <div style={styles.emptyTitle}>{title}</div>
+        <div style={styles.emptyDesc}>{desc}</div>
+      </div>
     </div>
   );
 }
@@ -267,27 +309,26 @@ export default function OrganizationBalancePage() {
 
   return (
     <div>
-      <PageHeader
-        kicker="Maliyyə"
-        title="Balans"
-        subtitle="Cari balans, bu ay üzrə xərclər və balans əməliyyatları üzrə tarixçə."
-      />
+      <BalanceHeader />
 
       {errorMessage ? <div style={styles.errorBox}>{errorMessage}</div> : null}
 
-      <section style={pageStyles.section}>
-        <div style={pageStyles.cardsGrid}>
-          <StatCard
+      <section style={styles.statsSection}>
+        <div style={styles.statsGrid}>
+          <BalanceStatCard
+            icon="₼"
             title="Cari balans"
             value={loading ? "-" : formatMoney(summary.balance)}
             desc="Təşkilatın cari balans göstəricisi."
           />
-          <StatCard
+          <BalanceStatCard
+            icon="AY"
             title="Bu ay xərclənib"
             value={loading ? "-" : formatMoney(summary.spentThisMonth)}
             desc="Bu ay tamamlanmış məxaric əməliyyatlarının cəmi."
           />
-          <StatCard
+          <BalanceStatCard
+            icon="BL"
             title="Bloklanmış məbləğ"
             value={loading ? "-" : formatMoney(summary.blocked)}
             desc="Gözləyən məxaric əməliyyatları üzrə bloklanmış məbləğ."
@@ -296,12 +337,12 @@ export default function OrganizationBalancePage() {
       </section>
 
       <section style={styles.visualGrid}>
-        <SectionPanel
+        <BalancePanel
           title="Xərclərin bölgüsü"
           desc="Tamamlanmış əməliyyatlar tip üzrə qruplaşdırılır."
         >
           <div style={styles.chartHeader}>
-            <div>
+            <div style={styles.chartHeaderText}>
               <span>Ümumi aktivlik</span>
               <strong>{formatMoney(expenseTotal)}</strong>
             </div>
@@ -312,9 +353,9 @@ export default function OrganizationBalancePage() {
             emptyTitle="Bu dövr üzrə xərc əməliyyatı yoxdur"
             emptyDesc="Əməliyyatlar yarandıqca qrafiklər avtomatik dolacaq."
           />
-        </SectionPanel>
+        </BalancePanel>
 
-        <SectionPanel
+        <BalancePanel
           title="Son 6 ay xərc trendi"
           desc="Tamamlanmış məxaric əməliyyatlarının aylıq dinamikası."
         >
@@ -324,17 +365,17 @@ export default function OrganizationBalancePage() {
             emptyTitle="Bu dövr üzrə xərc əməliyyatı yoxdur"
             emptyDesc="Əməliyyatlar yarandıqca qrafiklər avtomatik dolacaq."
           />
-        </SectionPanel>
+        </BalancePanel>
       </section>
 
-      <SectionPanel
+      <BalancePanel
         title="Son əməliyyatlar"
         desc="Balans artırmaları, lead haqqı, uğur komissiyası, bloklama və geri ödəniş əməliyyatları."
       >
         {loading ? <div style={styles.stateBox}>Balans əməliyyatları yüklənir...</div> : null}
 
         {!loading && !transactions.length ? (
-          <EmptyState
+          <CompactEmpty
             title="Balans əməliyyatları hələ yoxdur"
             desc="Lead haqqı, uğur komissiyası və balans artırmaları aktivləşdikdən sonra əməliyyatlar burada görünəcək."
           />
@@ -388,32 +429,183 @@ export default function OrganizationBalancePage() {
             </table>
           </div>
         ) : null}
-      </SectionPanel>
+      </BalancePanel>
     </div>
   );
 }
 
 const styles = {
+  header: {
+    marginBottom: "16px",
+    display: "grid",
+    gap: "6px",
+    maxWidth: "760px",
+  },
+  kicker: {
+    color: "#047857",
+    fontSize: "11px",
+    fontWeight: 650,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+  },
+  pageTitle: {
+    margin: 0,
+    color: "#0f172a",
+    fontSize: "24px",
+    lineHeight: 1.2,
+    fontWeight: 650,
+  },
+  subtitle: {
+    margin: 0,
+    color: "#64748b",
+    fontSize: "14px",
+    lineHeight: 1.55,
+  },
+  statsSection: {
+    marginBottom: "14px",
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "12px",
+  },
+  statCard: {
+    minHeight: "128px",
+    borderRadius: "16px",
+    border: "1px solid #e6edf5",
+    background: "#ffffff",
+    padding: "14px",
+    display: "grid",
+    alignContent: "start",
+    gap: "10px",
+    boxShadow: "0 6px 18px rgba(15,23,42,0.035)",
+  },
+  statTop: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    minWidth: 0,
+  },
+  statIcon: {
+    width: "28px",
+    height: "28px",
+    borderRadius: "10px",
+    background: "#f0fdf4",
+    color: "#047857",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "11px",
+    fontWeight: 650,
+    flexShrink: 0,
+  },
+  statLabel: {
+    minWidth: 0,
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: 550,
+    lineHeight: 1.35,
+  },
+  statValue: {
+    color: "#0f172a",
+    fontSize: "21px",
+    fontWeight: 600,
+    lineHeight: 1.15,
+  },
+  statDesc: {
+    color: "#64748b",
+    fontSize: "12px",
+    lineHeight: 1.5,
+  },
+  panel: {
+    borderRadius: "16px",
+    border: "1px solid #e6edf5",
+    background: "#ffffff",
+    padding: "16px",
+    boxShadow: "0 6px 18px rgba(15,23,42,0.035)",
+  },
+  panelHeader: {
+    display: "grid",
+    gap: "4px",
+    marginBottom: "14px",
+  },
+  panelTitle: {
+    margin: 0,
+    color: "#0f172a",
+    fontSize: "16px",
+    fontWeight: 650,
+    lineHeight: 1.3,
+  },
+  panelDesc: {
+    margin: 0,
+    color: "#64748b",
+    fontSize: "12px",
+    lineHeight: 1.5,
+  },
+  compactEmpty: {
+    minHeight: "96px",
+    borderRadius: "14px",
+    border: "1px dashed #d7e2ee",
+    background: "#fbfdff",
+    padding: "16px",
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    color: "#64748b",
+  },
+  emptyMark: {
+    width: "30px",
+    height: "30px",
+    borderRadius: "10px",
+    background: "#f0fdf4",
+    color: "#047857",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "13px",
+    fontWeight: 650,
+    flexShrink: 0,
+  },
+  emptyCopy: {
+    display: "grid",
+    gap: "3px",
+    minWidth: 0,
+  },
+  emptyTitle: {
+    color: "#334155",
+    fontSize: "13px",
+    fontWeight: 600,
+    lineHeight: 1.4,
+  },
+  emptyDesc: {
+    color: "#64748b",
+    fontSize: "12px",
+    lineHeight: 1.45,
+  },
   visualGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-    gap: "18px",
-    marginBottom: "18px",
+    gap: "14px",
+    marginBottom: "14px",
   },
   chartHeader: {
-    minHeight: "68px",
-    borderRadius: "8px",
-    background: "linear-gradient(135deg, #ecfdf5 0%, #eff6ff 100%)",
-    border: "1px solid #dbeafe",
-    padding: "14px",
+    minHeight: "56px",
+    borderRadius: "14px",
+    background: "#f8fafc",
+    border: "1px solid #e6edf5",
+    padding: "12px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     color: "#0f172a",
-    marginBottom: "14px",
+    marginBottom: "12px",
+  },
+  chartHeaderText: {
+    display: "grid",
+    gap: "3px",
   },
   barChart: {
-    minHeight: "184px",
+    minHeight: "156px",
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(36px, 1fr))",
     alignItems: "end",
@@ -423,15 +615,15 @@ const styles = {
   barItem: {
     minWidth: 0,
     display: "grid",
-    gridTemplateRows: "132px 24px",
+    gridTemplateRows: "112px 22px",
     alignItems: "end",
-    gap: "8px",
+    gap: "7px",
     color: "#64748b",
     fontSize: "11px",
     textAlign: "center",
   },
   barTrack: {
-    height: "132px",
+    height: "112px",
     borderRadius: "8px",
     background: "#f1f5f9",
     display: "flex",
@@ -444,48 +636,48 @@ const styles = {
     transition: "height 160ms ease",
   },
   chartEmpty: {
-    minHeight: "184px",
-    borderRadius: "8px",
-    border: "1px dashed #cbd5e1",
-    background: "#f8fafc",
+    minHeight: "156px",
+    borderRadius: "14px",
+    border: "1px dashed #d7e2ee",
+    background: "#fbfdff",
     color: "#64748b",
     display: "grid",
     placeItems: "center",
     alignContent: "center",
     gap: "6px",
     textAlign: "center",
-    padding: "20px",
-    fontSize: "13px",
+    padding: "16px",
+    fontSize: "12px",
   },
   stateBox: {
-    minHeight: "88px",
+    minHeight: "72px",
     borderRadius: "14px",
-    border: "1px solid #e2e8f0",
+    border: "1px solid #e6edf5",
     background: "#f8fafc",
-    padding: "18px",
+    padding: "14px",
     color: "#475569",
-    fontSize: "14px",
-    fontWeight: 650,
+    fontSize: "13px",
+    fontWeight: 600,
     display: "flex",
     alignItems: "center",
   },
   errorBox: {
-    minHeight: "76px",
+    minHeight: "64px",
     borderRadius: "14px",
     border: "1px solid #fecaca",
     background: "#fff7f7",
-    padding: "18px",
+    padding: "14px",
     color: "#b91c1c",
-    fontSize: "14px",
-    fontWeight: 650,
+    fontSize: "13px",
+    fontWeight: 600,
     lineHeight: 1.55,
-    marginBottom: "18px",
+    marginBottom: "14px",
   },
   tableShell: {
     width: "100%",
     overflowX: "auto",
-    border: "1px solid #e2e8f0",
-    borderRadius: "16px",
+    border: "1px solid #e6edf5",
+    borderRadius: "14px",
     background: "#ffffff",
   },
   table: {
@@ -496,65 +688,65 @@ const styles = {
   },
   th: {
     textAlign: "left",
-    padding: "14px",
+    padding: "12px",
     background: "#f8fafc",
-    borderBottom: "1px solid #e2e8f0",
-    borderRight: "1px solid #e2e8f0",
+    borderBottom: "1px solid #e6edf5",
+    borderRight: "1px solid #eef2f7",
     color: "#64748b",
-    fontSize: "13px",
-    fontWeight: 700,
+    fontSize: "12px",
+    fontWeight: 600,
     whiteSpace: "nowrap",
   },
   thRight: {
     textAlign: "right",
-    padding: "14px",
+    padding: "12px",
     background: "#f8fafc",
-    borderBottom: "1px solid #e2e8f0",
-    borderRight: "1px solid #e2e8f0",
+    borderBottom: "1px solid #e6edf5",
+    borderRight: "1px solid #eef2f7",
     color: "#64748b",
-    fontSize: "13px",
-    fontWeight: 700,
+    fontSize: "12px",
+    fontWeight: 600,
     whiteSpace: "nowrap",
   },
   td: {
-    padding: "14px",
+    padding: "12px",
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     color: "#334155",
-    fontSize: "14px",
+    fontSize: "13px",
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
   },
   tdStrong: {
-    padding: "14px",
+    padding: "12px",
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     color: "#0f172a",
-    fontSize: "14px",
-    fontWeight: 800,
+    fontSize: "13px",
+    fontWeight: 600,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
   },
   tdRight: {
-    padding: "14px",
+    padding: "12px",
     borderBottom: "1px solid #eef2f7",
     borderRight: "1px solid #eef2f7",
     color: "#0f172a",
-    fontSize: "14px",
-    fontWeight: 800,
+    fontSize: "13px",
+    fontWeight: 600,
     textAlign: "right",
     whiteSpace: "nowrap",
   },
   badge: {
     display: "inline-flex",
-    minHeight: "28px",
+    minHeight: "24px",
     alignItems: "center",
     borderRadius: "999px",
-    padding: "0 10px",
-    fontSize: "12px",
-    fontWeight: 750,
+    padding: "0 9px",
+    fontSize: "11px",
+    fontWeight: 600,
     whiteSpace: "nowrap",
   },
   badgeNeutral: {
@@ -563,17 +755,17 @@ const styles = {
     border: "1px solid #e2e8f0",
   },
   badgeWarning: {
-    background: "#fef3c7",
+    background: "#fffbeb",
     color: "#92400e",
     border: "1px solid #fde68a",
   },
   badgeSuccess: {
-    background: "#dcfce7",
+    background: "#f0fdf4",
     color: "#166534",
-    border: "1px solid #bbf7d0",
+    border: "1px solid #d9f99d",
   },
   badgeDanger: {
-    background: "#fee2e2",
+    background: "#fff1f2",
     color: "#991b1b",
     border: "1px solid #fecaca",
   },
