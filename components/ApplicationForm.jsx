@@ -182,7 +182,7 @@ export default function ApplicationForm() {
         nextProducts.filter(
           (item) =>
             formIds.has(Number(item.credit_form_id)) &&
-            typeIds.has(Number(item.product_type_id)) &&
+            (!item.product_type_id || typeIds.has(Number(item.product_type_id))) &&
             orgIds.has(Number(item.organization_id))
         )
       );
